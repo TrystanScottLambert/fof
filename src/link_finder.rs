@@ -69,7 +69,7 @@ pub fn ffl1(
     ind
 }
 
-pub fn fast_ffl1(
+pub fn find_links(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
     comoving_distances: Vec<f64>,

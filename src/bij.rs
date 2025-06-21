@@ -33,7 +33,7 @@ pub fn bijcheck(group_ids_1: &[i32], group_ids_2: &[i32], min_group_size: usize)
     let valid_indices_1: Vec<usize> = group_ids_1
         .par_iter()
         .enumerate()
-        .filter(|(_, &g)| valid_groups_1.contains(&g))
+        .filter(|&(_, &g)| valid_groups_1.contains(&g))
         .map(|(i, _)| i)
         .collect();
 
@@ -133,7 +133,7 @@ pub fn bijcheck(group_ids_1: &[i32], group_ids_2: &[i32], min_group_size: usize)
     let e_num = q1_values
         .iter()
         .zip(&q2_values)
-        .filter(|(&q1, &q2)| q1 > 0.5 && q2 > 0.5)
+        .filter(|&(&q1, &q2)| q1 > 0.5 && q2 > 0.5)
         .count();
 
     let e_den = n1_values.len();
