@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use rayon::prelude::*;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct BijResults {
@@ -26,7 +26,13 @@ pub fn bijcheck(group_ids_1: &[i32], group_ids_2: &[i32], min_group_size: usize)
     // Filter groups in tab1 with size >= groupcut
     let valid_groups_1: Vec<i32> = count_table_1
         .iter()
-        .filter_map(|(&group, &count)| if count >= min_group_size { Some(group) } else { None })
+        .filter_map(|(&group, &count)| {
+            if count >= min_group_size {
+                Some(group)
+            } else {
+                None
+            }
+        })
         .collect();
 
     // Indices of valid group members - can be parallelized
@@ -64,8 +70,13 @@ pub fn bijcheck(group_ids_1: &[i32], group_ids_2: &[i32], min_group_size: usize)
                 .filter_map(|(idx, &g)| if g == group_id { Some(idx) } else { None })
                 .collect();
 
-            let overlap_groups: Vec<i32> = group_galaxies.iter().map(|&idx| group_ids_2[idx]).collect();
-            let overlap_valid: Vec<i32> = overlap_groups.iter().cloned().filter(|&g| g != -1).collect();
+            let overlap_groups: Vec<i32> =
+                group_galaxies.iter().map(|&idx| group_ids_2[idx]).collect();
+            let overlap_valid: Vec<i32> = overlap_groups
+                .iter()
+                .cloned()
+                .filter(|&g| g != -1)
+                .collect();
 
             let n1_current = *count_table_1.get(&group_id).unwrap_or(&1) as f64;
 
@@ -98,7 +109,7 @@ pub fn bijcheck(group_ids_1: &[i32], group_ids_2: &[i32], min_group_size: usize)
                 // Single pass to find first occurrence of maximum
                 let mut best_match = 0;
                 let mut max_product = f64::NEG_INFINITY;
-                
+
                 for (idx, (&f1, &f2)) in frac_1.iter().zip(&frac_2).enumerate() {
                     let product = f1 * f2;
                     if product > max_product {
