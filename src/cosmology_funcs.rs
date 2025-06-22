@@ -8,32 +8,48 @@ use roots::find_root_brent;
 
 use crate::constants::{G, KM_TO_METERS, MPC_TO_METERS, MSOL_TO_KG, PC_TO_METERS, SPEED_OF_LIGHT};
 
+/// A Flat lambda CDM cosmology object.
+/// @param redshift_array an array of multiple redshift values.
+/// @param omega_m Mass density (often 0.3 in LCDM).
+/// @param omega_k Effective mass density of relativistic particles (often 0. in LCDM).
+/// @param omega_l Effective mass density of dark energy (often 0.7 in LCDM).
+/// @param h0 H0 = 100 * h.
 pub struct Cosmology {
+    /// Mass density (often 0.3 in LCDM).
     pub omega_m: f64,
+    /// Effective mass density of relativistic particles (often 0 in LCDM).
     pub omega_k: f64,
+    /// Effective mass density of dark energy (often 0.7 in LCDM).
     pub omega_l: f64,
+    // The hubble constant (h0 = 100 * h).
     pub h0: f64,
 }
 
+/// Distance type either Angualr or Comoving.
 #[derive(PartialEq)]
 pub enum DistanceType {
     Angular,
     Comoving,
 }
 
+
 impl Cosmology {
+    /// Calculates the e function, E(z) that is often used in cosmology calculates.
     pub fn e_func(&self, z: f64) -> f64 {
         (self.omega_m * (1.0 + z).powi(3) + self.omega_k * (1.0 + z).powi(2) + self.omega_l).sqrt()
     }
 
+    /// Calculates the hubble distance which is just the speed of light divided by the hubble constant.
     pub fn hubble_distance(&self) -> f64 {
         SPEED_OF_LIGHT / self.h0
     }
 
+    /// Calculates the H(z) for a given z.
     pub fn h_at_z(&self, z: f64) -> f64 {
         self.h0 * self.e_func(z)
     }
 
+    /// The critical density of the universe for either Angular or Comoving scales.
     pub fn rho_critical(&self, z: f64, distance_type: DistanceType) -> f64 {
         let hub_square = self.h_at_z(z).powi(2);
         let mut rho_crit =
@@ -48,6 +64,7 @@ impl Cosmology {
         }
     }
 
+    /// The co-moving distance at a given z.
     pub fn comoving_distance(&self, z: f64) -> f64 {
         if z < 1e-7 {
             return 0.;
@@ -61,6 +78,7 @@ impl Cosmology {
         self.hubble_distance() * cosmo_recession_velocity
     }
 
+    /// The redshift at a given co-moving distance.
     pub fn inverse_codist(&self, distance: f64) -> f64 {
         let f = |z: f64| self.comoving_distance(z) - distance;
         let mut convergency = SimpleConvergency {
@@ -73,6 +91,7 @@ impl Cosmology {
         }
     }
 
+    /// comoving transverse distance at a given redshift. This is just the comoving distance when k = 0.
     pub fn comoving_transverse_distance(&self, z: f64) -> f64 {
         let co_dist = self.comoving_distance(z);
         let h_dist = self.hubble_distance();
@@ -90,16 +109,19 @@ impl Cosmology {
         }
     }
 
+    /// The distance modulus at a given redshift. Used to convert apparent mag to absolute mag. M = m - D.
     pub fn distance_modulus(&self, z: f64) -> f64 {
         let co_trans_dist = self.comoving_transverse_distance(z);
         5. * log10(co_trans_dist * (1. + z)) + 25.
     }
 
+    /// The virial radius for the given virial mass.
     pub fn mvir_to_rvir(&self, solar_mass: f64, z: f64) -> f64 {
         let rho_crit = self.rho_critical(z, DistanceType::Comoving); // 1e9/1e6 for Lunit and other units. 
         (solar_mass * (3. / 4.) * (1. / (PI * 200. * rho_crit))).powf(1. / 3.) // 200 for delta_vir = 200
     }
 
+    /// The virial velocity distribution for the given viral mass.
     pub fn mvir_to_sigma(&self, solar_mass: f64, z: f64) -> f64 {
         let rho_crit = self.rho_critical(z, DistanceType::Angular);
         let g = G * (MSOL_TO_KG) / (PC_TO_METERS);

@@ -72,6 +72,9 @@ fn ffl1(
     ind
 }
 
+/// Find all the connections between all galaxies in a redshift survey.
+/// Returns a vector of tuples of (i, j) for galaxy i and j respectively.
+/// This can then be used to construct the group catalog.
 pub fn find_links(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,

@@ -2,12 +2,13 @@ use std::{f64::consts::PI, iter::zip};
 
 use crate::constants::SPEED_OF_LIGHT;
 use crate::cosmology_funcs::Cosmology;
-use crate::helper_funcs::{quantile_interpolated, mean, median};
+use crate::stats::{quantile_interpolated, mean, median};
 use crate::spherical_trig_funcs::{
     convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
     convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
 
+/// A Group struct which stores the necessary values required for the group catalog.
 pub struct Group {
     pub ra_members: Vec<f64>,
     pub dec_members: Vec<f64>,
@@ -17,19 +18,23 @@ pub struct Group {
 }
 
 impl Group {
+    /// Determines the number of galaxies found in the group. Known as the multiplicity.
     pub fn multiplicity(&self) -> u32 {
         self.ra_members.len() as u32
     }
 
+    /// The median of the redshfit of the members.
     pub fn median_redshift(&self) -> f64 {
         median(self.redshift_members.clone())
     }
 
+    /// The comoving distance at the median redshift.
     pub fn median_distance(&self, cosmo: &Cosmology) -> f64 {
         cosmo.comoving_distance(self.median_redshift())
     }
 
-    // sigma error would be in km/s.
+    /// The velocity dispersion as calculated through the gapper method.
+    /// The Sigma error would be in km/s.
     pub fn velocity_dispersion_gapper(&self) -> (f64, f64) {
         let sigma_err_squared = mean(self.velocity_errors.clone());
         let median_redshift = median(self.redshift_members.clone());
@@ -54,6 +59,7 @@ impl Group {
         (dispersion, sigma_err_squared.sqrt())
     }
 
+    /// The iterative RA and Dec.
     pub fn calculate_iterative_center(&self) -> (f64, f64) {
         let coords_cartesian: Vec<[f64; 3]> =
             zip(self.ra_members.clone(), self.dec_members.clone())
@@ -124,6 +130,8 @@ impl Group {
         (wrapped_ra, center[1])
     }
 
+    /// Several radii measurements of the group.
+    /// R50, Rsigma, R100. These are the radii that contain 50%, 68% and 100% of the galaxies.
     pub fn calculate_radius(
         &self,
         group_center_ra: f64,
@@ -158,6 +166,7 @@ impl Group {
     }
 }
 
+/// Struct of the galaxy group catalog.
 pub struct GroupedGalaxyCatalog {
     pub ra: Vec<f64>,
     pub dec: Vec<f64>,
@@ -168,6 +177,7 @@ pub struct GroupedGalaxyCatalog {
 }
 
 impl GroupedGalaxyCatalog {
+    /// Get all the group ids.
     fn get_unique_ids(&self) -> Vec<i32> {
         let mut ids = self.group_ids.clone();
         ids.sort();
@@ -175,6 +185,7 @@ impl GroupedGalaxyCatalog {
         ids
     }
 
+    /// Calculates all the group properties.
     pub fn calculate_group_properties(&self, cosmo: &Cosmology) -> GroupCatalog {
         let unique_group_ids = self.get_unique_ids();
         let mut id_groups: Vec<i32> = Vec::new();
@@ -263,6 +274,7 @@ impl GroupedGalaxyCatalog {
     }
 }
 
+/// Struct which represents the group catalog.
 pub struct GroupCatalog {
     pub ids: Vec<i32>,
     pub ras: Vec<f64>,

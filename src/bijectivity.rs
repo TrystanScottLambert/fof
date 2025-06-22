@@ -9,6 +9,8 @@ pub struct BijResults {
     pub q_den: f64,
 }
 
+/// Bijective comparison between two group catalogues as per Robotham+2011.
+/// This calculates Equations (9, 10, 12, and 13) from Robotham+2011
 pub fn bijcheck(group_ids_1: &[i32], group_ids_2: &[i32], min_group_size: usize) -> BijResults {
     assert_eq!(group_ids_1.len(), group_ids_2.len());
 
@@ -164,6 +166,8 @@ pub fn bijcheck(group_ids_1: &[i32], group_ids_2: &[i32], min_group_size: usize)
     }
 }
 
+/// The final S-score measurement for comparisons between two group catalogues.
+/// Equation 15 of Robotham+2011
 pub fn s_score(measured_groups: &[i32], mock_groups: &[i32], groupcut: usize) -> f64 {
     let mock_vals = bijcheck(mock_groups, measured_groups, groupcut);
     let measured_vals = bijcheck(measured_groups, mock_groups, groupcut);
