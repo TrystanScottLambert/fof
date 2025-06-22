@@ -2,6 +2,7 @@
 name = "fof"
 version = "0.1.0"
 edition = "2024"
+description = "A fast and flexible friends-of-friends algorithm for idenitfying galaxy groups in redshift surveys. This crate holds the core functionality which can be wrapped in other languages."
 license = "MIT"
 
 [dependencies]
