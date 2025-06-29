@@ -35,7 +35,7 @@ fn argsort<T: PartialOrd>(data: &[T]) -> Vec<usize> {
 }
 
 #[allow(dead_code)]
-fn ffl1(
+pub fn ffl1(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
     comoving_distances: Vec<f64>,
