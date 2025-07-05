@@ -70,6 +70,26 @@ pub fn median(mut values: Vec<f64>) -> f64 {
     }
 }
 
+/// Direct copy of the density function in R. 
+pub fn density(data: &[f64], binwidth: f64, from: f64, to: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
+    let step = (to - from)/(n as f64);
+    let mut x_vals = Vec::with_capacity(n);
+    let mut y_vals = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let x = from + i as f64 * step;
+        x_vals.push(x);
+
+        let count = data.iter()
+            .filter(|&&d| (x - binwidth/2.0..x + binwidth/2.0).contains(&d))
+            .count();
+
+        let density = count as f64 / (data.len() as f64 * binwidth);
+        y_vals.push(density)
+    }
+    (x_vals, y_vals)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -146,5 +166,10 @@ mod test {
         assert!((results_2 - answers_2).abs() < 1e-5);
         assert!((results_3 - answers_3).abs() < 1e-5);
         assert!((results_4 - answers_4).abs() < 1e-5);
+    }
+
+    #[test]
+    fn testing_the_density_function_against_R() {
+        
     }
 }

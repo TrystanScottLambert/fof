@@ -1,6 +1,6 @@
 use std::{f64::consts::PI, iter::zip};
 
-use crate::constants::SPEED_OF_LIGHT;
+use crate::constants::{SPEED_OF_LIGHT, G_MSOL_MPC_KMS2, SCALEMASS};
 use crate::cosmology_funcs::Cosmology;
 use crate::stats::{quantile_interpolated, mean, median};
 use crate::spherical_trig_funcs::{
@@ -58,6 +58,7 @@ impl Group {
         let dispersion = (raw_dispersion_squared - sigma_err_squared).sqrt();
         (dispersion, sigma_err_squared.sqrt())
     }
+
 
     /// The iterative RA and Dec.
     pub fn calculate_iterative_center(&self) -> (f64, f64) {
@@ -197,6 +198,9 @@ impl GroupedGalaxyCatalog {
         let mut r100_groups: Vec<f64> = Vec::new();
         let mut rsigma_groups: Vec<f64> = Vec::new();
         let mut multiplicity_groups: Vec<u32> = Vec::new();
+        let mut velocity_dispersions: Vec<f64> = Vec::new();
+        let mut velocity_dispersion_errs: Vec<f64> = Vec::new();
+        let mut raw_masses: Vec<f64> = Vec::new();
 
         for id in unique_group_ids {
             if id >= 0 {
@@ -243,10 +247,14 @@ impl GroupedGalaxyCatalog {
                     velocity_errors: local_vel_errors,
                 };
 
+                let (velocity_disp, velocity_disp_err) = local_group.velocity_dispersion_gapper();
+               
                 let (ra_group, dec_group) = local_group.calculate_iterative_center();
                 let z_group = local_group.median_redshift();
                 let [r50_group, rsimga_group, r100_group] =
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
+
+                let raw_mass =   SCALEMASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
 
                 id_groups.push(id);
                 itercen_ra_groups.push(ra_group);
@@ -257,6 +265,10 @@ impl GroupedGalaxyCatalog {
                 rsigma_groups.push(rsimga_group);
                 distance_groups.push(local_group.median_distance(cosmo));
                 multiplicity_groups.push(local_group.multiplicity());
+                velocity_dispersions.push(velocity_disp);
+                velocity_dispersion_errs.push(velocity_disp_err);
+                raw_masses.push(raw_mass)
+
             }
         }
 
@@ -270,6 +282,9 @@ impl GroupedGalaxyCatalog {
             r100s: r100_groups,
             rsigmas: rsigma_groups,
             multiplicity: multiplicity_groups,
+            velocity_dispersion_gap: velocity_dispersions,
+            velocity_dispersion_gap_err: velocity_dispersion_errs,
+            raw_masses,
         }
     }
 }
@@ -285,6 +300,9 @@ pub struct GroupCatalog {
     pub r100s: Vec<f64>,
     pub rsigmas: Vec<f64>,
     pub multiplicity: Vec<u32>,
+    pub velocity_dispersion_gap: Vec<f64>,
+    pub velocity_dispersion_gap_err: Vec<f64>,
+    pub raw_masses: Vec<f64>,
 }
 
 #[cfg(test)]
