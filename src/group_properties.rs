@@ -1,12 +1,12 @@
 use std::{f64::consts::PI, iter::zip};
 
-use crate::constants::{SPEED_OF_LIGHT, G_MSOL_MPC_KMS2, SCALEMASS};
+use crate::constants::{G_MSOL_MPC_KMS2, SCALEMASS, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
-use crate::stats::{quantile_interpolated, mean, median};
 use crate::spherical_trig_funcs::{
     convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
     convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
+use crate::stats::{mean, median, quantile_interpolated};
 
 /// A Group struct which stores the necessary values required for the group catalog.
 pub struct Group {
@@ -58,7 +58,6 @@ impl Group {
         let dispersion = (raw_dispersion_squared - sigma_err_squared).sqrt();
         (dispersion, sigma_err_squared.sqrt())
     }
-
 
     /// The iterative RA and Dec.
     pub fn calculate_iterative_center(&self) -> (f64, f64) {
@@ -248,13 +247,13 @@ impl GroupedGalaxyCatalog {
                 };
 
                 let (velocity_disp, velocity_disp_err) = local_group.velocity_dispersion_gapper();
-               
+
                 let (ra_group, dec_group) = local_group.calculate_iterative_center();
                 let z_group = local_group.median_redshift();
                 let [r50_group, rsimga_group, r100_group] =
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
 
-                let raw_mass =   SCALEMASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
+                let raw_mass = SCALEMASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
 
                 id_groups.push(id);
                 itercen_ra_groups.push(ra_group);
@@ -268,7 +267,6 @@ impl GroupedGalaxyCatalog {
                 velocity_dispersions.push(velocity_disp);
                 velocity_dispersion_errs.push(velocity_disp_err);
                 raw_masses.push(raw_mass)
-
             }
         }
 
