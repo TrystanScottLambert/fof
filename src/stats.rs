@@ -1,18 +1,6 @@
 /// Quantile caclulation. Produces the quantile of the given probability.
 /// This is a clone of the quantile function in R.
 /// 
-/// # Examples
-/// 
-/// ```
-/// let sample = [6., 15., 3., 8., 10., 16., 7., 8., 13., , 20.];
-/// let prob = 0.5;
-/// 
-/// // sort the sample
-/// sample.sort_by(|a, b| a.partial_cmp(b).unwrap());
-/// let quant = quantile_iterpolated(sample, prob);
-/// 
-/// assert!((quant - 9).abs() < 1e-9)
-/// ```
 pub fn quantile_interpolated(sorted: &[f64], quantile: f64) -> f64 {
     let n = sorted.len();
     if n == 0 {
@@ -34,6 +22,7 @@ pub fn quantile_interpolated(sorted: &[f64], quantile: f64) -> f64 {
 /// 
 /// #Examples
 /// ```
+/// use fof::stats::harmonic_mean;
 /// let values = vec![1., 4., 4.];
 /// let answer = 2.;
 /// let result = harmonic_mean(values);
@@ -168,8 +157,4 @@ mod test {
         assert!((results_4 - answers_4).abs() < 1e-5);
     }
 
-    #[test]
-    fn testing_the_density_function_against_R() {
-        
-    }
 }
