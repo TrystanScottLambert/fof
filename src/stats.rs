@@ -1,6 +1,6 @@
 /// Quantile caclulation. Produces the quantile of the given probability.
 /// This is a clone of the quantile function in R.
-/// 
+///
 pub fn quantile_interpolated(sorted: &[f64], quantile: f64) -> f64 {
     let n = sorted.len();
     if n == 0 {
@@ -19,7 +19,7 @@ pub fn quantile_interpolated(sorted: &[f64], quantile: f64) -> f64 {
 
 /// Harmonic mean calculation. The reciprocal of the arithmetic mean of the reciprocals.
 /// Meant to replicate the pscyh::harmonic.mean in R.
-/// 
+///
 /// #Examples
 /// ```
 /// use fof::stats::harmonic_mean;
@@ -33,7 +33,6 @@ pub fn harmonic_mean(values: Vec<f64>) -> f64 {
     let summation = values.iter().map(|v| 1. / v).sum::<f64>();
     n / summation
 }
-
 
 /// Compute the arithmetic mean.
 pub fn mean(values: Vec<f64>) -> f64 {
@@ -59,9 +58,9 @@ pub fn median(mut values: Vec<f64>) -> f64 {
     }
 }
 
-/// Direct copy of the density function in R. 
+/// Direct copy of the density function in R.
 pub fn density(data: &[f64], binwidth: f64, from: f64, to: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
-    let step = (to - from)/(n as f64);
+    let step = (to - from) / (n as f64);
     let mut x_vals = Vec::with_capacity(n);
     let mut y_vals = Vec::with_capacity(n);
 
@@ -69,8 +68,9 @@ pub fn density(data: &[f64], binwidth: f64, from: f64, to: f64, n: usize) -> (Ve
         let x = from + i as f64 * step;
         x_vals.push(x);
 
-        let count = data.iter()
-            .filter(|&&d| (x - binwidth/2.0..x + binwidth/2.0).contains(&d))
+        let count = data
+            .iter()
+            .filter(|&&d| (x - binwidth / 2.0..x + binwidth / 2.0).contains(&d))
             .count();
 
         let density = count as f64 / (data.len() as f64 * binwidth);
@@ -156,5 +156,4 @@ mod test {
         assert!((results_3 - answers_3).abs() < 1e-5);
         assert!((results_4 - answers_4).abs() < 1e-5);
     }
-
 }

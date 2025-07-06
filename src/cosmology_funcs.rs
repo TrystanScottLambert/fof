@@ -3,8 +3,8 @@ use std::f64::consts::PI;
 use integrate::adaptive_quadrature;
 use libm::log10;
 use libm::sinh;
-use roots::SimpleConvergency;
 use roots::find_root_brent;
+use roots::SimpleConvergency;
 
 use crate::constants::{G, KM_TO_METERS, MPC_TO_METERS, MSOL_TO_KG, PC_TO_METERS, SPEED_OF_LIGHT};
 
@@ -31,7 +31,6 @@ pub enum DistanceType {
     Angular,
     Comoving,
 }
-
 
 impl Cosmology {
     /// Calculates the e function, E(z) that is often used in cosmology calculates.
@@ -117,7 +116,7 @@ impl Cosmology {
 
     /// The virial radius for the given virial mass.
     pub fn mvir_to_rvir(&self, solar_mass: f64, z: f64) -> f64 {
-        let rho_crit = self.rho_critical(z, DistanceType::Comoving); // 1e9/1e6 for Lunit and other units. 
+        let rho_crit = self.rho_critical(z, DistanceType::Comoving); // 1e9/1e6 for Lunit and other units.
         (solar_mass * (3. / 4.) * (1. / (PI * 200. * rho_crit))).powf(1. / 3.) // 200 for delta_vir = 200
     }
 

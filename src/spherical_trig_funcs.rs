@@ -42,6 +42,7 @@ pub fn euclidean_distance_3d(point_1: &[f64; 3], point_2: &[f64; 3]) -> f64 {
 
 /// Chord length. Given the angular separation.
 pub fn chord_distance(angular_separation_degrees: f64) -> f64 {
+    assert!((0. ..=180.).contains(&angular_separation_degrees));
     2. * (angular_separation_degrees.to_radians() / 2.).sin()
 }
 
