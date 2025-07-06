@@ -7,6 +7,7 @@ license = "MIT"
 
 [dependencies]
 integrate = "0.1.11"
+kiddo = "5.2.2"
 libm = "0.2.15"
 rayon = "1.10.0"
 roots = "0.0.8"
