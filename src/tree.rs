@@ -17,10 +17,14 @@ pub fn build_kd_tree(ra_array_deg: Vec<f64>, dec_array_deg: Vec<f64>) -> Immutab
     ImmutableKdTree::new_from_slice(&entries)
 }
 
-pub fn find_idx_within(tree: ImmutableKdTree<f64, 3>, point: Point, angular_difference_deg: f64) -> Vec<u64> {
+pub fn find_idx_within(
+    tree: ImmutableKdTree<f64, 3>,
+    point: Point,
+    angular_difference_deg: f64,
+) -> Vec<u64> {
     let point_cartesian = convert_equitorial_to_cartesian(&point.ra_deg, &point.dec_deg);
     let dist = chord_distance(angular_difference_deg).powi(2); // squared chord distance.
-    let neighbors = tree.within::<SquaredEuclidean>(&point_cartesian, dist);
+    let neighbors = tree.within_unsorted::<SquaredEuclidean>(&point_cartesian, dist);
     neighbors.iter().map(|nn| nn.item).collect()
 }
 
@@ -47,13 +51,16 @@ mod tests {
         let ras = vec![120., 120.9999, 120., 180.];
         let decs = vec![0., 0., 0., -45.];
         let tree = build_kd_tree(ras, decs);
-        let point = Point { ra_deg: 120., dec_deg: 0. };
-        let result = find_idx_within(tree, point, 1.);
+        let point = Point {
+            ra_deg: 120.,
+            dec_deg: 0.,
+        };
+        let mut result = find_idx_within(tree, point, 1.);
         assert_eq!(result.len(), 3);
-        let answers = [0, 2, 1];
+        let answers = [0, 1, 2];
+        result.sort();
         for (res, ans) in zip(result, answers) {
             assert_eq!(res, ans)
         }
     }
-
 }

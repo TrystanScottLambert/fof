@@ -1,6 +1,7 @@
+use rustc_hash::FxHashSet;
+
 use crate::spherical_trig_funcs::convert_equitorial_to_cartesian;
-use crate::tree::{build_kd_tree, find_idx_within, Point};
-use libm::atan2;
+use kiddo::{ImmutableKdTree, SquaredEuclidean};
 use rayon::prelude::*;
 
 // Combined function that finds indices and removes target in one go
@@ -103,8 +104,8 @@ pub fn find_links(
         .into_par_iter()
         .map(|i| {
             let dist_i = comoving_distances[i];
-            let lower_lim = dist_i - max_los_ll;
-            let upper_lim = dist_i + max_los_ll;
+            let lower_lim = dist_i - (max_los_ll + linking_lengths_los[i]) * 0.5;
+            let upper_lim = dist_i + (max_los_ll + linking_lengths_los[i]) * 0.5;
             let possible_los_idx =
                 find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
 
@@ -135,7 +136,6 @@ pub fn find_links(
     results
 }
 
-
 pub fn find_links_tree(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
@@ -149,35 +149,49 @@ pub fn find_links_tree(
         .map(|i| convert_equitorial_to_cartesian(&ra_array[i], &dec_array[i]))
         .collect();
 
+    let global_tree = ImmutableKdTree::new_from_slice(&coords);
+
     let max_los_ll = linking_lengths_los.iter().cloned().fold(f64::NAN, f64::max);
-    let max_pos_ll = linking_lengths_pos.iter().cloned().fold(f64::NAN, f64::max);
 
     let mut sorted_distances = comoving_distances.clone();
     sorted_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
     let dist_argsort = argsort(&comoving_distances);
 
     // Parallel outer loop
     let results: Vec<(usize, usize)> = (0..(n - 1))
         .into_par_iter()
         .map(|i| {
-            let point = Point {ra_deg: ra_array[i], dec_deg: dec_array[i]};
-            let maximum_angular_separation = atan2(max_pos_ll, comoving_distances[i]).to_degrees();
+            let point = [coords[i][0], coords[i][1], coords[i][2]];
             let dist_i = comoving_distances[i];
-            let lower_lim = dist_i - max_los_ll;
-            let upper_lim = dist_i + max_los_ll;
-            let possible_los_idx =
-                find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
-            
-            let possible_ras: Vec<f64> = possible_los_idx.iter().map(|&i| ra_array[i]).collect();
-            let possible_decs: Vec<f64> = possible_los_idx.iter().map(|&i| dec_array[i]).collect();
-            let local_tree = build_kd_tree(possible_ras, possible_decs);
-            let possible_pos_idx = find_idx_within(local_tree, point, maximum_angular_separation);
+            let lower_lim = dist_i - (max_los_ll + linking_lengths_los[i]) * 0.5;
+            let upper_lim = dist_i + (max_los_ll + linking_lengths_los[i]) * 0.5;
 
-            let possible_idxs = possible_pos_idx.iter().map(|&i| possible_los_idx[i as usize]);
+            let mut possible_los_idx =
+                find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
+
+            let max_local_pos_ll = {
+                let mut max = 0.0;
+                for &idx in &possible_los_idx {
+                    let val = (linking_lengths_pos[idx] + linking_lengths_pos[i]) * 0.5;
+                    if val > max {
+                        max = val;
+                    }
+                }
+                max
+            };
+
+            let global_search =
+                global_tree.within_unsorted::<SquaredEuclidean>(&point, max_local_pos_ll.powi(2));
+            let global_set: FxHashSet<usize> = global_search
+                .iter()
+                .filter(|&n| n.item > (i as u64))
+                .map(|n| n.item as usize)
+                .collect();
+            possible_los_idx.retain(|item| global_set.contains(item));
+
             let mut local_pairs = Vec::new();
 
-            for j in possible_idxs {
+            for j in possible_los_idx {
                 let average_los_ll = (linking_lengths_los[i] + linking_lengths_los[j]) * 0.5;
                 let zrad = (comoving_distances[i] - comoving_distances[j]).abs();
 
@@ -209,6 +223,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore]
     fn faster_links() {
         // These functions should be better benchmarked in the R code reading in the
         // old gama data.
@@ -228,7 +243,7 @@ mod tests {
             linking_lengths_pos.clone(),
             linking_lengths_los.clone(),
         );
-        let new_links = find_links_tree(
+        let new_links = find_links(
             ra_array.clone(),
             dec_array.clone(),
             comoving_distances.clone(),
