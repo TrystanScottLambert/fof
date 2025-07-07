@@ -6,6 +6,7 @@ pub mod link_finder;
 pub mod spherical_trig_funcs;
 pub mod stats;
 pub mod completeness;
+pub mod tree;
 
 pub use cosmology_funcs::Cosmology;
 pub use link_finder::find_links;
