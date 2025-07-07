@@ -1,4 +1,6 @@
 use crate::spherical_trig_funcs::convert_equitorial_to_cartesian;
+use crate::tree::{build_kd_tree, find_idx_within, Point};
+use libm::atan2;
 use rayon::prelude::*;
 
 // Combined function that finds indices and removes target in one go
@@ -133,6 +135,73 @@ pub fn find_links(
     results
 }
 
+
+pub fn find_links_tree(
+    ra_array: Vec<f64>,
+    dec_array: Vec<f64>,
+    comoving_distances: Vec<f64>,
+    linking_lengths_pos: Vec<f64>,
+    linking_lengths_los: Vec<f64>,
+) -> Vec<(usize, usize)> {
+    let n = ra_array.len();
+
+    let coords: Vec<[f64; 3]> = (0..n)
+        .map(|i| convert_equitorial_to_cartesian(&ra_array[i], &dec_array[i]))
+        .collect();
+
+    let max_los_ll = linking_lengths_los.iter().cloned().fold(f64::NAN, f64::max);
+    let max_pos_ll = linking_lengths_pos.iter().cloned().fold(f64::NAN, f64::max);
+
+    let mut sorted_distances = comoving_distances.clone();
+    sorted_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let dist_argsort = argsort(&comoving_distances);
+
+    // Parallel outer loop
+    let results: Vec<(usize, usize)> = (0..(n - 1))
+        .into_par_iter()
+        .map(|i| {
+            let point = Point {ra_deg: ra_array[i], dec_deg: dec_array[i]};
+            let maximum_angular_separation = atan2(max_pos_ll, comoving_distances[i]).to_degrees();
+            let dist_i = comoving_distances[i];
+            let lower_lim = dist_i - max_los_ll;
+            let upper_lim = dist_i + max_los_ll;
+            let possible_los_idx =
+                find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
+            
+            let possible_ras: Vec<f64> = possible_los_idx.iter().map(|&i| ra_array[i]).collect();
+            let possible_decs: Vec<f64> = possible_los_idx.iter().map(|&i| dec_array[i]).collect();
+            let local_tree = build_kd_tree(possible_ras, possible_decs);
+            let possible_pos_idx = find_idx_within(local_tree, point, maximum_angular_separation);
+
+            let possible_idxs = possible_pos_idx.iter().map(|&i| possible_los_idx[i as usize]);
+            let mut local_pairs = Vec::new();
+
+            for j in possible_idxs {
+                let average_los_ll = (linking_lengths_los[i] + linking_lengths_los[j]) * 0.5;
+                let zrad = (comoving_distances[i] - comoving_distances[j]).abs();
+
+                if zrad <= average_los_ll {
+                    let bgal2 = ((linking_lengths_pos[i] + linking_lengths_pos[j]) * 0.5).powi(2);
+
+                    let radproj = (0..3)
+                        .map(|k| (coords[i][k] - coords[j][k]).powi(2))
+                        .sum::<f64>();
+
+                    if radproj <= bgal2 {
+                        local_pairs.push((i, j));
+                    }
+                }
+            }
+
+            local_pairs
+        })
+        .flatten()
+        .collect();
+
+    results
+}
+
 #[cfg(test)]
 mod tests {
     use std::iter::zip;
@@ -159,7 +228,7 @@ mod tests {
             linking_lengths_pos.clone(),
             linking_lengths_los.clone(),
         );
-        let new_links = find_links(
+        let new_links = find_links_tree(
             ra_array.clone(),
             dec_array.clone(),
             comoving_distances.clone(),

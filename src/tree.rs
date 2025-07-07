@@ -3,8 +3,8 @@ use kiddo::ImmutableKdTree;
 use kiddo::SquaredEuclidean;
 
 pub struct Point {
-    ra_deg: f64,
-    dec_deg: f64,
+    pub ra_deg: f64,
+    pub dec_deg: f64,
 }
 
 pub fn build_kd_tree(ra_array_deg: Vec<f64>, dec_array_deg: Vec<f64>) -> ImmutableKdTree<f64, 3> {
