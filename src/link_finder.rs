@@ -34,6 +34,7 @@ fn argsort<T: PartialOrd>(data: &[T]) -> Vec<usize> {
     idx
 }
 
+/// Copy of the c++ implementation of the original gama-group finder that we can test against.
 #[allow(dead_code)]
 pub fn ffl1(
     ra_array: Vec<f64>,
@@ -44,7 +45,7 @@ pub fn ffl1(
 ) -> Vec<(usize, usize)> {
     let n = ra_array.len();
 
-    // Convert (RA, Dec, dist) to 3D Cartesian coordinates
+    // Convert (RA, Dec, dist) to 3D Cartesian coordinates.
     let coords: Vec<[f64; 3]> = (0..n)
         .map(|i| convert_equitorial_to_cartesian(&ra_array[i], &dec_array[i]))
         .collect();
