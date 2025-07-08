@@ -1,6 +1,6 @@
 use std::{iter::zip, time::Instant};
 
-use fof::link_finder::{find_links, find_links_tree};
+use fof::link_finder::{find_links, find_links_just_z};
 
 #[test]
 fn recovering_ffl1() {
@@ -23,7 +23,7 @@ fn recovering_ffl1() {
     }
 
     let now_new = Instant::now();
-    let answer = find_links_tree(
+    let answer = find_links(
         ras.clone(),
         decs.clone(),
         distances.clone(),
@@ -33,7 +33,7 @@ fn recovering_ffl1() {
     let tree_time = now_new.elapsed();
 
     let now_old = Instant::now();
-    let result = find_links(
+    let result = find_links_just_z(
         ras.clone(),
         decs.clone(),
         distances.clone(),
@@ -61,7 +61,7 @@ fn recovering_ffl1() {
     result_right.sort();
 
     for (res, ans) in zip(result_left.clone(), answer_left.clone()) {
-        assert_eq!(res, ans + 1)
+        assert_eq!(res, ans)
     }
 
     for (res, ans) in zip(result_right.clone(), answer_right.clone()) {

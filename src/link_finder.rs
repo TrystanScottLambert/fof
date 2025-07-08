@@ -38,7 +38,6 @@ fn argsort<T: PartialOrd>(data: &[T]) -> Vec<usize> {
 }
 
 /// Copy of the c++ implementation of the original gama-group finder that we can test against.
-#[allow(dead_code)]
 pub fn ffl1(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
@@ -76,10 +75,8 @@ pub fn ffl1(
     ind
 }
 
-/// Find all the connections between all galaxies in a redshift survey.
-/// Returns a vector of tuples of (i, j) for galaxy i and j respectively.
-/// This can then be used to construct the group catalog.
-pub fn find_links(
+// Faster version where we presort the radial direction. Used for testing not production.
+pub fn find_links_just_z(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
     comoving_distances: Vec<f64>,
@@ -136,7 +133,10 @@ pub fn find_links(
     results
 }
 
-pub fn find_links_tree(
+/// Find all the connections between all galaxies in a redshift survey.
+/// Returns a vector of tuples of (i, j) for galaxy i and j respectively.
+/// This can then be used to construct the group catalog.
+pub fn find_links(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
     comoving_distances: Vec<f64>,
@@ -223,7 +223,6 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore]
     fn faster_links() {
         // These functions should be better benchmarked in the R code reading in the
         // old gama data.
