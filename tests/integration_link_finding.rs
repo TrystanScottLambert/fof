@@ -1,6 +1,6 @@
 use std::{iter::zip, time::Instant};
 
-use fof::link_finder::{find_links, find_links_just_z};
+use fof::link_finder::{ffl1, find_links};
 
 #[test]
 fn recovering_ffl1() {
@@ -33,7 +33,7 @@ fn recovering_ffl1() {
     let tree_time = now_new.elapsed();
 
     let now_old = Instant::now();
-    let result = find_links_just_z(
+    let result = ffl1(
         ras.clone(),
         decs.clone(),
         distances.clone(),
