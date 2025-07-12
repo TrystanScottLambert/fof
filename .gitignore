@@ -1,2 +1,2 @@
 /target
-tests/test_big_af_links.csv
+tests/*.csv
