@@ -1,4 +1,7 @@
+use rustc_hash::FxHashSet;
+
 use crate::spherical_trig_funcs::convert_equitorial_to_cartesian;
+use kiddo::{ImmutableKdTree, SquaredEuclidean};
 use rayon::prelude::*;
 
 // Combined function that finds indices and removes target in one go
@@ -34,7 +37,7 @@ fn argsort<T: PartialOrd>(data: &[T]) -> Vec<usize> {
     idx
 }
 
-#[allow(dead_code)]
+/// Copy of the c++ implementation of the original gama-group finder that we can test against.
 pub fn ffl1(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
@@ -44,7 +47,7 @@ pub fn ffl1(
 ) -> Vec<(usize, usize)> {
     let n = ra_array.len();
 
-    // Convert (RA, Dec, dist) to 3D Cartesian coordinates
+    // Convert (RA, Dec, dist) to 3D Cartesian coordinates.
     let coords: Vec<[f64; 3]> = (0..n)
         .map(|i| convert_equitorial_to_cartesian(&ra_array[i], &dec_array[i]))
         .collect();
@@ -72,10 +75,8 @@ pub fn ffl1(
     ind
 }
 
-/// Find all the connections between all galaxies in a redshift survey.
-/// Returns a vector of tuples of (i, j) for galaxy i and j respectively.
-/// This can then be used to construct the group catalog.
-pub fn find_links(
+// Faster version where we presort the radial direction. Used for testing not production.
+pub fn find_links_just_z(
     ra_array: Vec<f64>,
     dec_array: Vec<f64>,
     comoving_distances: Vec<f64>,
@@ -100,10 +101,93 @@ pub fn find_links(
         .into_par_iter()
         .map(|i| {
             let dist_i = comoving_distances[i];
-            let lower_lim = dist_i - max_los_ll;
-            let upper_lim = dist_i + max_los_ll;
+            let lower_lim = dist_i - (max_los_ll + linking_lengths_los[i]) * 0.5;
+            let upper_lim = dist_i + (max_los_ll + linking_lengths_los[i]) * 0.5;
             let possible_los_idx =
                 find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
+
+            let mut local_pairs = Vec::new();
+
+            for j in possible_los_idx {
+                let average_los_ll = (linking_lengths_los[i] + linking_lengths_los[j]) * 0.5;
+                let zrad = (comoving_distances[i] - comoving_distances[j]).abs();
+
+                if zrad <= average_los_ll {
+                    let bgal2 = ((linking_lengths_pos[i] + linking_lengths_pos[j]) * 0.5).powi(2);
+
+                    let radproj = (0..3)
+                        .map(|k| (coords[i][k] - coords[j][k]).powi(2))
+                        .sum::<f64>();
+
+                    if radproj <= bgal2 {
+                        local_pairs.push((i, j));
+                    }
+                }
+            }
+
+            local_pairs
+        })
+        .flatten()
+        .collect();
+
+    results
+}
+
+/// Find all the connections between all galaxies in a redshift survey.
+/// Returns a vector of tuples of (i, j) for galaxy i and j respectively.
+/// This can then be used to construct the group catalog.
+pub fn find_links(
+    ra_array: Vec<f64>,
+    dec_array: Vec<f64>,
+    comoving_distances: Vec<f64>,
+    linking_lengths_pos: Vec<f64>,
+    linking_lengths_los: Vec<f64>,
+) -> Vec<(usize, usize)> {
+    let n = ra_array.len();
+
+    let coords: Vec<[f64; 3]> = (0..n)
+        .map(|i| convert_equitorial_to_cartesian(&ra_array[i], &dec_array[i]))
+        .collect();
+
+    let global_tree = ImmutableKdTree::new_from_slice(&coords);
+
+    let max_los_ll = linking_lengths_los.iter().cloned().fold(f64::NAN, f64::max);
+
+    let mut sorted_distances = comoving_distances.clone();
+    sorted_distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let dist_argsort = argsort(&comoving_distances);
+
+    // Parallel outer loop
+    let results: Vec<(usize, usize)> = (0..(n - 1))
+        .into_par_iter()
+        .map(|i| {
+            let point = [coords[i][0], coords[i][1], coords[i][2]];
+            let dist_i = comoving_distances[i];
+            let lower_lim = dist_i - (max_los_ll + linking_lengths_los[i]) * 0.5;
+            let upper_lim = dist_i + (max_los_ll + linking_lengths_los[i]) * 0.5;
+
+            let mut possible_los_idx =
+                find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
+
+            let max_local_pos_ll = {
+                let mut max = 0.0;
+                for &idx in &possible_los_idx {
+                    let val = (linking_lengths_pos[idx] + linking_lengths_pos[i]) * 0.5;
+                    if val > max {
+                        max = val;
+                    }
+                }
+                max
+            };
+
+            let global_search =
+                global_tree.within_unsorted::<SquaredEuclidean>(&point, max_local_pos_ll.powi(2));
+            let global_set: FxHashSet<usize> = global_search
+                .iter()
+                .filter(|&n| n.item > (i as u64))
+                .map(|n| n.item as usize)
+                .collect();
+            possible_los_idx.retain(|item| global_set.contains(item));
 
             let mut local_pairs = Vec::new();
 

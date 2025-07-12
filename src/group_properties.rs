@@ -430,12 +430,42 @@ mod tests {
             assert!((res_ra - ans_ra).abs() < 1e-8);
         }
 
-        for (res_red, ans_red) in zip(result.redshifts, vec![0.2, 0.4, 0.8, 1.0]) {
+        for (res_red, ans_red) in zip(&result.redshifts, vec![0.2, 0.4, 0.8, 1.0]) {
             assert!((res_red - ans_red).abs() < 1e-8);
         }
 
         for (res_mult, ans_mult) in zip(result.multiplicity, vec![4, 3, 2, 2]) {
             assert_eq!(res_mult, ans_mult);
         }
+
+        for (res_ids, ans_ids) in zip(result.ids, vec![1, 2, 3]) {
+            assert_eq!(res_ids, ans_ids)
+        }
+        let ans_distances: Vec<f64> = result
+            .redshifts
+            .into_iter()
+            .map(|z| cosmo.comoving_distance(z))
+            .collect();
+
+        for (res_distance, ans_distance) in zip(result.distances, ans_distances) {
+            assert_eq!(res_distance, ans_distance)
+        }
+
+        for (res_50, ans_50) in zip(result.r50s, vec![0., 0., 0.]) {
+            assert!((res_50 - ans_50).abs() < 1e-7)
+        }
+
+        for (res_100, ans_100) in zip(result.r100s, vec![0., 0., 0.]) {
+            assert!((res_100 - ans_100).abs() < 1e-7)
+        }
+
+        for (res_sig, ans_sig) in zip(result.rsigmas, vec![0., 0., 0.]) {
+            assert!((res_sig - ans_sig).abs() < 1e-7)
+        }
+
+        //for (res_mass_raw, ans_mass_raw) in zip(result.raw_masses, vec![0., 0., 0.]) {
+        //    println!("mass raw");
+        //    assert_eq!(res_mass_raw, ans_mass_raw)
+        //}
     }
 }
