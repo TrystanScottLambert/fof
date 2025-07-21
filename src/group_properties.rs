@@ -204,6 +204,10 @@ impl GroupedGalaxyCatalog {
         let mut velocity_dispersions: Vec<f64> = Vec::new();
         let mut velocity_dispersion_errs: Vec<f64> = Vec::new();
         let mut raw_masses: Vec<f64> = Vec::new();
+        let mut bcg_idxs: Vec<usize> = Vec::new();
+        let mut bcg_ras: Vec<f64> = Vec::new();
+        let mut bcg_decs: Vec<f64> = Vec::new();
+        let mut bcg_redshifts: Vec<f64> = Vec::new();
 
         for id in unique_group_ids {
             if id >= 0 {
@@ -242,6 +246,17 @@ impl GroupedGalaxyCatalog {
                     .map(|i| *self.velocity_errors.get(i as usize).unwrap())
                     .collect();
 
+                let local_bcg_id = local_mag
+                    .iter()
+                    .enumerate()
+                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                    .map(|(i, _)| i)
+                    .unwrap();
+                let global_bcg_idx = local_group_ids[local_bcg_id] as usize;
+                let bcg_ra = local_ra[local_bcg_id];
+                let bcg_dec = local_dec[local_bcg_id];
+                let bcg_z= local_z[local_bcg_id];
+
                 let local_group = Group {
                     ra_members: local_ra,
                     dec_members: local_dec,
@@ -270,7 +285,11 @@ impl GroupedGalaxyCatalog {
                 multiplicity_groups.push(local_group.multiplicity());
                 velocity_dispersions.push(velocity_disp);
                 velocity_dispersion_errs.push(velocity_disp_err);
-                raw_masses.push(raw_mass)
+                raw_masses.push(raw_mass);
+                bcg_idxs.push(global_bcg_idx);
+                bcg_ras.push(bcg_ra);
+                bcg_decs.push(bcg_dec);
+                bcg_redshifts.push(bcg_z);
             }
         }
 
@@ -287,6 +306,10 @@ impl GroupedGalaxyCatalog {
             velocity_dispersion_gap: velocity_dispersions,
             velocity_dispersion_gap_err: velocity_dispersion_errs,
             raw_masses,
+            bcg_idxs,
+            bcg_ras,
+            bcg_decs,
+            bcg_redshifts
         }
     }
 }
@@ -305,6 +328,10 @@ pub struct GroupCatalog {
     pub velocity_dispersion_gap: Vec<f64>,
     pub velocity_dispersion_gap_err: Vec<f64>,
     pub raw_masses: Vec<f64>,
+    pub bcg_idxs: Vec<usize>,
+    pub bcg_ras: Vec<f64>,
+    pub bcg_decs: Vec<f64>,
+    pub bcg_redshifts: Vec<f64>
 }
 
 #[cfg(test)]
@@ -354,6 +381,53 @@ mod tests {
         // RA should be close to 180.0 and Dec to 0.0 (within ~0.01 deg)
         assert!((ra - 180.0).abs() < 1e-6, "RA deviated too far: {}", ra);
         assert!(dec.abs() < 1e-6, "Dec deviated too far: {}", dec);
+    }
+
+    #[test]
+    fn testing_bcg_properties() {
+        let cosmo = Cosmology {
+            omega_m: 0.3,
+            omega_k: 0.,
+            omega_l: 0.7,
+            h0: 70.,
+        };
+
+        // making a catalog with two groups, two binary pairs, and two single values.
+        let catalog = GroupedGalaxyCatalog {
+            ra: vec![23.1, 23., 23., 23., 43.1, 43., 43., 56.1, 56., 90., 90., 5., 270.,],
+            dec: vec![-20., -20.1, -20., -20., 0., 0.1, 0., 90., 90.1, 18., 18., -90., 56.,],
+            redshift: vec![0.21, 0.2, 0.2, 0.2, 0.41, 0.4, 0.4, 0.81, 0.8, 1.01, 1.0, 0.5, 0.5,],
+            absolute_magnitudes: vec![-23., -18., -18., -18., -23., -18., -18., -23., -18., -23., -18., -18., -18.],
+            velocity_errors: vec![50.; 13],
+            group_ids: vec![1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, -1, -1],
+        };
+
+        let results = catalog.calculate_group_properties(&cosmo);
+        let ans = [0, 4, 7, 9];
+        for (res, ans) in zip(results.bcg_idxs, ans) {
+            assert_eq!(res, ans)
+        }
+
+        let result_ra = results.bcg_ras;
+        let ans_ra = [23.1, 43.1, 56.1, 90.];
+
+        let result_dec = results.bcg_decs;
+        let ans_dec = [-20., 0., 90., 18.];
+
+        let result_z = results.bcg_redshifts;
+        let ans_redshift = [0.21, 0.41, 0.81, 1.01];
+
+        for (res, ans) in zip(result_ra, ans_ra) {
+            assert_eq!(res, ans)
+        }
+        for (res, ans) in zip(result_dec, ans_dec) {
+            assert_eq!(res, ans)
+        }
+        for (res, ans) in zip(result_z, ans_redshift) {
+            assert_eq!(res, ans)
+        }
+
+        
     }
 
     #[test]
