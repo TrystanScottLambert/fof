@@ -3,8 +3,7 @@ use std::{f64::consts::PI, iter::zip};
 use crate::constants::{G_MSOL_MPC_KMS2, SCALEMASS, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
 use crate::spherical_trig_funcs::{
-    convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
-    convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
+    convert_equitorial_to_cartesian, convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
 use crate::stats::{mean, median, quantile_interpolated};
 
@@ -63,20 +62,24 @@ impl Group {
         (dispersion, sigma_err_squared.sqrt())
     }
 
-    /// The iterative RA and Dec.
-    pub fn calculate_iterative_center(&self) -> (f64, f64) {
+    /// Returns the index (in the original input arrays) of the final remaining object
+    /// after iteratively removing the furthest objects from the flux-weighted center.
+    pub fn calculate_iterative_center_idx(&self) -> usize {
         let coords_cartesian: Vec<[f64; 3]> =
             zip(self.ra_members.clone(), self.dec_members.clone())
                 .map(|(ra, dec)| convert_equitorial_to_cartesian(&ra, &dec))
                 .collect();
+
         let flux: Vec<f64> = self
             .absolute_magnitude_members
             .iter()
             .map(|mag| 10_f64.powf(-0.4 * mag))
             .collect();
 
-        let mut temp_flux = flux.clone();
+        // Track original indices alongside coords and flux
         let mut temp_coords = coords_cartesian.clone();
+        let mut temp_flux = flux.clone();
+        let mut temp_indices: Vec<usize> = (0..coords_cartesian.len()).collect();
 
         while temp_flux.len() > 2 {
             let flux_sum: f64 = temp_flux.iter().cloned().sum();
@@ -106,10 +109,13 @@ impl Group {
             {
                 temp_coords.remove(max_idx);
                 temp_flux.remove(max_idx);
+                temp_indices.remove(max_idx);
             } else {
                 break;
             }
         }
+
+        // Find the index of the remaining object with highest flux
         let max_flux_idx = temp_flux
             .iter()
             .enumerate()
@@ -117,21 +123,8 @@ impl Group {
             .map(|(i, _)| i)
             .unwrap();
 
-        let final_cartesian = temp_coords[max_flux_idx];
-
-        // Convert back to spherical RA/Dec (in degrees)
-        let center = convert_cartesian_to_equitorial(
-            &final_cartesian[0],
-            &final_cartesian[1],
-            &final_cartesian[2],
-        );
-        let wrapped_ra = if center[0] < 0.0 {
-            center[0] + 360.0
-        } else {
-            center[0]
-        };
-
-        (wrapped_ra, center[1])
+        // Return the original index
+        temp_indices[max_flux_idx]
     }
 
     /// Several radii measurements of the group.
@@ -193,9 +186,11 @@ impl GroupedGalaxyCatalog {
     pub fn calculate_group_properties(&self, cosmo: &Cosmology) -> GroupCatalog {
         let unique_group_ids = self.get_unique_ids();
         let mut id_groups: Vec<i32> = Vec::new();
-        let mut itercen_ra_groups: Vec<f64> = Vec::new();
-        let mut itercen_dec_groups: Vec<f64> = Vec::new();
-        let mut redshift_groups: Vec<f64> = Vec::new();
+        let mut iterative_ras: Vec<f64> = Vec::new();
+        let mut iterative_decs: Vec<f64> = Vec::new();
+        let mut iterative_redshifts: Vec<f64> = Vec::new();
+        let mut iterative_idxs: Vec<usize> = Vec::new();
+        let mut median_redshifts: Vec<f64> = Vec::new();
         let mut distance_groups: Vec<f64> = Vec::new();
         let mut r50_groups: Vec<f64> = Vec::new();
         let mut r100_groups: Vec<f64> = Vec::new();
@@ -255,19 +250,27 @@ impl GroupedGalaxyCatalog {
                 let global_bcg_idx = local_group_ids[local_bcg_id] as usize;
                 let bcg_ra = local_ra[local_bcg_id];
                 let bcg_dec = local_dec[local_bcg_id];
-                let bcg_z= local_z[local_bcg_id];
+                let bcg_z = local_z[local_bcg_id];
 
                 let local_group = Group {
-                    ra_members: local_ra,
-                    dec_members: local_dec,
-                    redshift_members: local_z,
+                    ra_members: local_ra.clone(),
+                    dec_members: local_dec.clone(),
+                    redshift_members: local_z.clone(),
                     absolute_magnitude_members: local_mag,
                     velocity_errors: local_vel_errors,
                 };
 
                 let (velocity_disp, velocity_disp_err) = local_group.velocity_dispersion_gapper();
 
-                let (ra_group, dec_group) = local_group.calculate_iterative_center();
+                //let (ra_group, dec_group) = local_group.calculate_iterative_center();
+                let iterative_idx = local_group.calculate_iterative_center_idx();
+                let (iter_idx, ra_group, dec_group, iterative_redshift) = (
+                    iterative_idx,
+                    local_ra[iterative_idx],
+                    local_dec[iterative_idx],
+                    local_z[iterative_idx],
+                );
+
                 let z_group = local_group.median_redshift();
                 let [r50_group, rsimga_group, r100_group] =
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
@@ -275,9 +278,11 @@ impl GroupedGalaxyCatalog {
                 let raw_mass = SCALEMASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
 
                 id_groups.push(id);
-                itercen_ra_groups.push(ra_group);
-                itercen_dec_groups.push(dec_group);
-                redshift_groups.push(z_group);
+                iterative_ras.push(ra_group);
+                iterative_decs.push(dec_group);
+                iterative_redshifts.push(iterative_redshift);
+                iterative_idxs.push(iter_idx);
+                median_redshifts.push(z_group);
                 r50_groups.push(r50_group);
                 r100_groups.push(r100_group);
                 rsigma_groups.push(rsimga_group);
@@ -295,9 +300,11 @@ impl GroupedGalaxyCatalog {
 
         GroupCatalog {
             ids: id_groups,
-            ras: itercen_ra_groups,
-            decs: itercen_dec_groups,
-            redshifts: redshift_groups,
+            iter_ras: iterative_ras,
+            iter_decs: iterative_decs,
+            iter_redshifts: iterative_redshifts,
+            iter_idxs: iterative_idxs,
+            median_redshifts,
             distances: distance_groups,
             r50s: r50_groups,
             r100s: r100_groups,
@@ -309,7 +316,7 @@ impl GroupedGalaxyCatalog {
             bcg_idxs,
             bcg_ras,
             bcg_decs,
-            bcg_redshifts
+            bcg_redshifts,
         }
     }
 }
@@ -317,9 +324,11 @@ impl GroupedGalaxyCatalog {
 /// Struct which represents the group catalog.
 pub struct GroupCatalog {
     pub ids: Vec<i32>,
-    pub ras: Vec<f64>,
-    pub decs: Vec<f64>,
-    pub redshifts: Vec<f64>,
+    pub iter_ras: Vec<f64>,
+    pub iter_decs: Vec<f64>,
+    pub iter_redshifts: Vec<f64>,
+    pub iter_idxs: Vec<usize>,
+    pub median_redshifts: Vec<f64>,
     pub distances: Vec<f64>,
     pub r50s: Vec<f64>,
     pub r100s: Vec<f64>,
@@ -331,7 +340,7 @@ pub struct GroupCatalog {
     pub bcg_idxs: Vec<usize>,
     pub bcg_ras: Vec<f64>,
     pub bcg_decs: Vec<f64>,
-    pub bcg_redshifts: Vec<f64>
+    pub bcg_redshifts: Vec<f64>,
 }
 
 #[cfg(test)]
@@ -361,7 +370,7 @@ mod tests {
             velocity_errors: vec![1000., 1000., 1000., 1000.],
             ra_members: vec![0.2, 0.2, 0.2, 0.2],
             dec_members: vec![50., 50., 50., 50.],
-            absolute_magnitude_members: vec![-18., -18., -18., -18.], 
+            absolute_magnitude_members: vec![-18., -18., -18., -18.],
         };
         let result = group.velocity_dispersion_gapper();
         assert_eq!(result.0, 0.0);
@@ -377,7 +386,11 @@ mod tests {
             velocity_errors: vec![50., 50., 50., 50.],
         };
 
-        let (ra, dec) = group.calculate_iterative_center();
+        let iterative_center = group.calculate_iterative_center_idx();
+        let (ra, dec) = (
+            group.ra_members[iterative_center],
+            group.dec_members[iterative_center],
+        );
         // RA should be close to 180.0 and Dec to 0.0 (within ~0.01 deg)
         assert!((ra - 180.0).abs() < 1e-6, "RA deviated too far: {}", ra);
         assert!(dec.abs() < 1e-6, "Dec deviated too far: {}", dec);
@@ -394,10 +407,18 @@ mod tests {
 
         // making a catalog with two groups, two binary pairs, and two single values.
         let catalog = GroupedGalaxyCatalog {
-            ra: vec![23.1, 23., 23., 23., 43.1, 43., 43., 56.1, 56., 90., 90., 5., 270.,],
-            dec: vec![-20., -20.1, -20., -20., 0., 0.1, 0., 90., 90.1, 18., 18., -90., 56.,],
-            redshift: vec![0.21, 0.2, 0.2, 0.2, 0.41, 0.4, 0.4, 0.81, 0.8, 1.01, 1.0, 0.5, 0.5,],
-            absolute_magnitudes: vec![-23., -18., -18., -18., -23., -18., -18., -23., -18., -23., -18., -18., -18.],
+            ra: vec![
+                23.1, 23., 23., 23., 43.1, 43., 43., 56.1, 56., 90., 90., 5., 270.,
+            ],
+            dec: vec![
+                -20., -20.1, -20., -20., 0., 0.1, 0., 90., 90.1, 18., 18., -90., 56.,
+            ],
+            redshift: vec![
+                0.21, 0.2, 0.2, 0.2, 0.41, 0.4, 0.4, 0.81, 0.8, 1.01, 1.0, 0.5, 0.5,
+            ],
+            absolute_magnitudes: vec![
+                -23., -18., -18., -18., -23., -18., -18., -23., -18., -23., -18., -18., -18.,
+            ],
             velocity_errors: vec![50.; 13],
             group_ids: vec![1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, -1, -1],
         };
@@ -426,8 +447,6 @@ mod tests {
         for (res, ans) in zip(result_z, ans_redshift) {
             assert_eq!(res, ans)
         }
-
-        
     }
 
     #[test]
@@ -454,7 +473,11 @@ mod tests {
             velocity_errors: vec![50., 50., 50.],
         };
 
-        let (ra, dec) = group.calculate_iterative_center();
+        let iterative_center = group.calculate_iterative_center_idx();
+        let (ra, dec) = (
+            group.ra_members[iterative_center],
+            group.dec_members[iterative_center],
+        );
         assert_eq!(ra, group.ra_members[1]);
         assert_eq!(dec, group.dec_members[1]);
     }
@@ -513,15 +536,15 @@ mod tests {
         };
 
         let result = catalog.calculate_group_properties(&cosmo);
-        for (res_dec, ans_dec) in zip(result.decs, vec![-20., 0., 90., 18.]) {
+        for (res_dec, ans_dec) in zip(result.iter_decs, vec![-20., 0., 90., 18.]) {
             assert!((res_dec - ans_dec).abs() < 1e-8);
         }
 
-        for (res_ra, ans_ra) in zip(result.ras, vec![23., 43., 56., 90.]) {
+        for (res_ra, ans_ra) in zip(result.iter_ras, vec![23., 43., 56., 90.]) {
             assert!((res_ra - ans_ra).abs() < 1e-8);
         }
 
-        for (res_red, ans_red) in zip(&result.redshifts, vec![0.2, 0.4, 0.8, 1.0]) {
+        for (res_red, ans_red) in zip(&result.median_redshifts, vec![0.2, 0.4, 0.8, 1.0]) {
             assert!((res_red - ans_red).abs() < 1e-8);
         }
 
@@ -533,7 +556,7 @@ mod tests {
             assert_eq!(res_ids, ans_ids)
         }
         let ans_distances: Vec<f64> = result
-            .redshifts
+            .median_redshifts
             .into_iter()
             .map(|z| cosmo.comoving_distance(z))
             .collect();
@@ -553,10 +576,5 @@ mod tests {
         for (res_sig, ans_sig) in zip(result.rsigmas, vec![0., 0., 0.]) {
             assert!((res_sig - ans_sig).abs() < 1e-7)
         }
-
-        //for (res_mass_raw, ans_mass_raw) in zip(result.raw_masses, vec![0., 0., 0.]) {
-        //    println!("mass raw");
-        //    assert_eq!(res_mass_raw, ans_mass_raw)
-        //}
     }
 }
