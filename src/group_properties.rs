@@ -55,7 +55,11 @@ impl Group {
         let sum: f64 = zip(weights, gaps).map(|(a, b)| a as f64 * b).sum();
         let sigma_gap: f64 = ((PI.sqrt()) / (nf64 * (nf64 - 1.))) * sum;
         let raw_dispersion_squared = (n as f64 * sigma_gap.powi(2)) / (nf64 - 1.);
-        let dispersion = (raw_dispersion_squared - sigma_err_squared).sqrt();
+        let dispersion = if raw_dispersion_squared > sigma_err_squared {
+            (raw_dispersion_squared - sigma_err_squared).sqrt()
+        } else {
+            0.0
+        };
         (dispersion, sigma_err_squared.sqrt())
     }
 
@@ -321,6 +325,19 @@ mod tests {
         let result = group.velocity_dispersion_gapper();
         assert_eq!(result.0, 35908.750028805);
         assert_eq!(result.1, 5.70087712549569);
+    }
+
+    #[test]
+    fn gapper_largeerror_0() {
+        let group = Group {
+            redshift_members: vec![0.3, 0.3, 0.3, 0.3],
+            velocity_errors: vec![1000., 1000., 1000., 1000.],
+            ra_members: vec![0.2, 0.2, 0.2, 0.2],
+            dec_members: vec![50., 50., 50., 50.],
+            absolute_magnitude_members: vec![-18., -18., -18., -18.], 
+        };
+        let result = group.velocity_dispersion_gapper();
+        assert_eq!(result.0, 0.0);
     }
 
     #[test]
