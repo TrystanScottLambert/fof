@@ -264,12 +264,12 @@ impl GroupedGalaxyCatalog {
 
                 //let (ra_group, dec_group) = local_group.calculate_iterative_center();
                 let iterative_idx = local_group.calculate_iterative_center_idx();
-                let (iter_idx, ra_group, dec_group, iterative_redshift) = (
-                    iterative_idx,
+                let (ra_group, dec_group, iterative_redshift) = (
                     local_ra[iterative_idx],
                     local_dec[iterative_idx],
                     local_z[iterative_idx],
                 );
+                let global_iterative_idx = local_group_ids[iterative_idx] as usize;
 
                 let z_group = local_group.median_redshift();
                 let [r50_group, rsimga_group, r100_group] =
@@ -281,7 +281,7 @@ impl GroupedGalaxyCatalog {
                 iterative_ras.push(ra_group);
                 iterative_decs.push(dec_group);
                 iterative_redshifts.push(iterative_redshift);
-                iterative_idxs.push(iter_idx);
+                iterative_idxs.push(global_iterative_idx);
                 median_redshifts.push(z_group);
                 r50_groups.push(r50_group);
                 r100_groups.push(r100_group);
