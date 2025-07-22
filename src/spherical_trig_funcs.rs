@@ -46,6 +46,13 @@ pub fn chord_distance(angular_separation_degrees: f64) -> f64 {
     2. * (angular_separation_degrees.to_radians() / 2.).sin()
 }
 
+/// projected separation between two galaxies.
+pub fn calculate_projected_separation(ra_deg_1: &f64, dec_deg_1: &f64, ra_deg_2: &f64, dec_deg_2: &f64) -> f64 {
+    let point_1 = convert_equitorial_to_cartesian(ra_deg_1, dec_deg_1);
+    let point_2 = convert_equitorial_to_cartesian(ra_deg_2, dec_deg_2);
+    euclidean_distance_3d(&point_1, &point_2)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

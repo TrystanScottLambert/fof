@@ -1,9 +1,10 @@
 use std::{f64::consts::PI, iter::zip};
 
-use crate::constants::{G_MSOL_MPC_KMS2, SCALE_FLUX, SCALE_MASS, SPEED_OF_LIGHT, SOLAR_MAG};
+use crate::constants::{G_MSOL_MPC_KMS2, SCALE_FLUX, SCALE_MASS, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
-use crate::spherical_trig_funcs::{ convert_cartesian_to_equitorial,
-    convert_equitorial_to_cartesian, convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
+use crate::spherical_trig_funcs::{
+    convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
+    convert_equitorial_to_cartesian_scaled, euclidean_distance_3d, calculate_projected_separation,
 };
 use crate::stats::{mean, median, quantile_interpolated};
 
@@ -163,34 +164,56 @@ impl Group {
     }
 
     pub fn calculate_center_of_light(&self) -> (f64, f64) {
-        let fluxes: Vec<f64> =  self.absolute_magnitude_members.iter().map(|mag| 10.0_f64.powf(-0.4*mag)).collect();
+        let fluxes: Vec<f64> = self
+            .absolute_magnitude_members
+            .iter()
+            .map(|mag| 10.0_f64.powf(-0.4 * mag))
+            .collect();
         let sum_flux: f64 = fluxes.iter().sum();
         let coords_cartesian: Vec<[f64; 3]> =
             zip(self.ra_members.clone(), self.dec_members.clone())
                 .map(|(ra, dec)| convert_equitorial_to_cartesian(&ra, &dec))
                 .collect();
-        
+
         let weighted_x = coords_cartesian
             .iter()
             .zip(fluxes.iter())
             .map(|(coord, flux)| coord[0] * flux)
-            .sum::<f64>() / sum_flux;
+            .sum::<f64>()
+            / sum_flux;
 
         let weighted_y = coords_cartesian
             .iter()
             .zip(fluxes.iter())
             .map(|(coord, flux)| coord[1] * flux)
-            .sum::<f64>() / sum_flux;
+            .sum::<f64>()
+            / sum_flux;
 
         let weighted_z = coords_cartesian
             .iter()
             .zip(fluxes.iter())
             .map(|(coord, flux)| coord[2] * flux)
-            .sum::<f64>() / sum_flux;
+            .sum::<f64>()
+            / sum_flux;
 
         let center = convert_cartesian_to_equitorial(&weighted_x, &weighted_y, &weighted_z);
         (center[0], center[1])
+    }
 
+    pub fn calculate_flux_weighted_redshift(&self) -> f64 {
+        let fluxes: Vec<f64> = self
+            .absolute_magnitude_members
+            .iter()
+            .map(|mag| 10_f64.powf(-0.4 * mag))
+            .collect();
+        let sum_flux: f64 = fluxes.iter().sum();
+
+        self.redshift_members
+            .iter()
+            .zip(fluxes.iter())
+            .map(|(red, flux)| red * flux)
+            .sum::<f64>()
+            / sum_flux
     }
 
     pub fn total_flux(&self) -> f64 {
@@ -207,10 +230,6 @@ impl Group {
     pub fn total_absolute_magnitude(&self) -> f64 {
         -2.5 * self.total_flux().log10()
     }
-
-
-
-
 }
 
 /// Struct of the galaxy group catalog.
@@ -330,9 +349,8 @@ impl GroupedGalaxyCatalog {
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
 
                 let raw_mass = SCALE_MASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
-                
+
                 let (col_ra, col_dec) = local_group.calculate_center_of_light();
-        
 
                 id_groups.push(id);
                 iterative_ras.push(ra_group);
@@ -384,6 +402,90 @@ impl GroupedGalaxyCatalog {
             total_absolute_mags,
         }
     }
+
+    pub fn calculate_pair_properties(&self) -> PairCatalog {
+        let unique_group_ids = self.get_unique_ids();
+        let mut ids: Vec<i32> = Vec::new();
+        let mut idx_1: Vec<i32> = Vec::new();
+        let mut idx_2: Vec<i32> = Vec::new();
+        let mut projected_separation: Vec<f64> = Vec::new();
+        let mut velocity_separation: Vec<f64> = Vec::new();
+        let mut ra_bar: Vec<f64> = Vec::new();
+        let mut dec_bar: Vec<f64> = Vec::new();
+        let mut redshift_bar: Vec<f64> = Vec::new();
+        let mut total_absolute_mags: Vec<f64> = Vec::new();
+
+        for id in unique_group_ids {
+            if id >= 0 {
+                // ignoring singletons = -1
+                let local_group_ids: Vec<i32> = self
+                    .group_ids
+                    .clone()
+                    .into_iter()
+                    .enumerate()
+                    .filter_map(|(idx, i)| if i == id { Some(idx as i32) } else { None })
+                    .collect();
+                
+
+                if local_group_ids.len() == 2 {
+                    let local_ra: Vec<f64> = local_group_ids
+                        .clone()
+                        .into_iter()
+                        .map(|i| *self.ra.get(i as usize).unwrap())
+                        .collect();
+                    let local_dec: Vec<f64> = local_group_ids
+                        .clone()
+                        .into_iter()
+                        .map(|i| *self.dec.get(i as usize).unwrap())
+                        .collect();
+                    let local_z: Vec<f64> = local_group_ids
+                        .clone()
+                        .into_iter()
+                        .map(|i| *self.redshift.get(i as usize).unwrap())
+                        .collect();
+                    let local_mag: Vec<f64> = local_group_ids
+                        .clone()
+                        .into_iter()
+                        .map(|i| *self.absolute_magnitudes.get(i as usize).unwrap())
+                        .collect();
+
+                    
+                    let local_group = Group {
+                        ra_members: local_ra.clone(),
+                        dec_members: local_dec.clone(),
+                        redshift_members: local_z.clone(),
+                        absolute_magnitude_members: local_mag,
+                        velocity_errors: vec![50.;1], // dummy variable
+                    };
+
+                    let (ra, dec) = local_group.calculate_center_of_light();
+
+                    ids.push(id);
+                    idx_1.push(local_group_ids[0]);
+                    idx_2.push(local_group_ids[1]);
+                    projected_separation.push(calculate_projected_separation(&local_ra[0], &local_dec[0], &local_ra[1], &local_dec[1]));
+                    velocity_separation.push((local_z[0] - local_z[1]).abs());
+                    ra_bar.push(ra);
+                    dec_bar.push(dec);
+                    redshift_bar.push(local_group.calculate_flux_weighted_redshift());
+                    total_absolute_mags.push(local_group.total_absolute_magnitude())
+
+                }
+            }
+        }
+        PairCatalog {
+            ids,
+            idx_1,
+            idx_2,
+            projected_separation,
+            velocity_separation,
+            ra_bar,
+            dec_bar,
+            redshift_bar,
+            total_absolute_mags
+        }
+    }
+
 }
 
 /// Struct which represents the group catalog.
@@ -409,6 +511,19 @@ pub struct GroupCatalog {
     pub col_ras: Vec<f64>,
     pub col_decs: Vec<f64>,
     pub total_flux_proxies: Vec<f64>,
+    pub total_absolute_mags: Vec<f64>,
+}
+
+/// Struct representing the pair catalog
+pub struct PairCatalog {
+    pub ids: Vec<i32>,
+    pub idx_1: Vec<i32>,
+    pub idx_2: Vec<i32>,
+    pub projected_separation: Vec<f64>,
+    pub velocity_separation: Vec<f64>,
+    pub ra_bar: Vec<f64>,
+    pub dec_bar: Vec<f64>,
+    pub redshift_bar: Vec<f64>,
     pub total_absolute_mags: Vec<f64>,
 }
 
@@ -553,7 +668,6 @@ mod tests {
 
     #[test]
     fn testing_flux_vals() {
-
         let group = Group {
             ra_members: vec![23., 23.2, 22.9, 24.0],
             dec_members: vec![-23., -23.2, -23.2, -23.],
@@ -599,7 +713,7 @@ mod tests {
     }
 
     #[test]
-    fn test_catalog() {
+    fn test_group_catalog() {
         let cosmo = Cosmology {
             omega_m: 0.3,
             omega_k: 0.,
@@ -664,5 +778,47 @@ mod tests {
         for (res_sig, ans_sig) in zip(result.rsigmas, vec![0., 0., 0.]) {
             assert!((res_sig - ans_sig).abs() < 1e-7)
         }
+    }
+
+    #[test]
+    fn testing_pair_catalog() {
+        // making a catalog with two groups, two binary pairs, and two single values.
+        let catalog = GroupedGalaxyCatalog {
+            ra: vec![
+                23., 23., 23., 23., 43., 43., 43., 56., 56., 90., 90., 5., 270.,
+            ],
+            dec: vec![
+                -20., -20., -20., -20., 0., 0., 0., 90., 90., 18., 18., -90., 56.,
+            ],
+            redshift: vec![
+                0.2, 0.2, 0.2, 0.2, 0.4, 0.4, 0.4, 0.8, 0.81, 1.1, 1.0, 0.5, 0.5,
+            ],
+            absolute_magnitudes: vec![-18.; 13],
+            velocity_errors: vec![50.; 13],
+            group_ids: vec![1, 1, 1, 1, 2, 2, 2, 3, 3, 4, 4, -1, -1],
+        };
+        let result = catalog.calculate_pair_properties();
+        let answer_id = [3, 4];
+        let answer_id_1 = [7, 9];
+        let answer_id_2 = [8, 10];
+        let answer_projected_separation = [0., 0.];
+        let answer_vel_sep = [0.01, 0.1];
+
+        for (res, ans) in zip(result.ids, answer_id) {
+            assert_eq!(res, ans)
+        }
+        for (res, ans) in zip(result.idx_1, answer_id_1) {
+            assert_eq!(res, ans)
+        }
+        for (res, ans) in zip(result.idx_2, answer_id_2) {
+            assert_eq!(res, ans)
+        }
+        for (res, ans) in zip(result.projected_separation, answer_projected_separation) {
+            assert_eq!(res, ans)
+        }
+        for (res, ans) in zip(result.velocity_separation, answer_vel_sep) {
+            assert!((res - ans).abs() < 1e-7)
+        }
+        
     }
 }
