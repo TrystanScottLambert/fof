@@ -1,8 +1,8 @@
 use std::{f64::consts::PI, iter::zip};
 
-use crate::constants::{G_MSOL_MPC_KMS2, SCALEMASS, SPEED_OF_LIGHT};
+use crate::constants::{G_MSOL_MPC_KMS2, SCALE_FLUX, SCALE_MASS, SPEED_OF_LIGHT, SOLAR_MAG};
 use crate::cosmology_funcs::Cosmology;
-use crate::spherical_trig_funcs::{
+use crate::spherical_trig_funcs::{ convert_cartesian_to_equitorial,
     convert_equitorial_to_cartesian, convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
 use crate::stats::{mean, median, quantile_interpolated};
@@ -161,6 +161,56 @@ impl Group {
 
         [q50, q68, q100]
     }
+
+    pub fn calculate_center_of_light(&self) -> (f64, f64) {
+        let fluxes: Vec<f64> =  self.absolute_magnitude_members.iter().map(|mag| 10.0_f64.powf(-0.4*mag)).collect();
+        let sum_flux: f64 = fluxes.iter().sum();
+        let coords_cartesian: Vec<[f64; 3]> =
+            zip(self.ra_members.clone(), self.dec_members.clone())
+                .map(|(ra, dec)| convert_equitorial_to_cartesian(&ra, &dec))
+                .collect();
+        
+        let weighted_x = coords_cartesian
+            .iter()
+            .zip(fluxes.iter())
+            .map(|(coord, flux)| coord[0] * flux)
+            .sum::<f64>() / sum_flux;
+
+        let weighted_y = coords_cartesian
+            .iter()
+            .zip(fluxes.iter())
+            .map(|(coord, flux)| coord[1] * flux)
+            .sum::<f64>() / sum_flux;
+
+        let weighted_z = coords_cartesian
+            .iter()
+            .zip(fluxes.iter())
+            .map(|(coord, flux)| coord[2] * flux)
+            .sum::<f64>() / sum_flux;
+
+        let center = convert_cartesian_to_equitorial(&weighted_x, &weighted_y, &weighted_z);
+        (center[0], center[1])
+
+    }
+
+    pub fn total_flux(&self) -> f64 {
+        self.absolute_magnitude_members
+            .iter()
+            .map(|mag| 10.0_f64.powf(-0.4 * mag))
+            .sum()
+    }
+
+    pub fn flux_proxy(&self) -> f64 {
+        self.total_flux() * SCALE_FLUX * 10.0_f64.powf(0.4 * SOLAR_MAG)
+    }
+
+    pub fn total_absolute_magnitude(&self) -> f64 {
+        -2.5 * self.total_flux().log10()
+    }
+
+
+
+
 }
 
 /// Struct of the galaxy group catalog.
@@ -203,6 +253,10 @@ impl GroupedGalaxyCatalog {
         let mut bcg_ras: Vec<f64> = Vec::new();
         let mut bcg_decs: Vec<f64> = Vec::new();
         let mut bcg_redshifts: Vec<f64> = Vec::new();
+        let mut col_ras: Vec<f64> = Vec::new();
+        let mut col_decs: Vec<f64> = Vec::new();
+        let mut total_absolute_mags: Vec<f64> = Vec::new();
+        let mut total_flux_proxies: Vec<f64> = Vec::new();
 
         for id in unique_group_ids {
             if id >= 0 {
@@ -275,7 +329,10 @@ impl GroupedGalaxyCatalog {
                 let [r50_group, rsimga_group, r100_group] =
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
 
-                let raw_mass = SCALEMASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
+                let raw_mass = SCALE_MASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
+                
+                let (col_ra, col_dec) = local_group.calculate_center_of_light();
+        
 
                 id_groups.push(id);
                 iterative_ras.push(ra_group);
@@ -295,6 +352,10 @@ impl GroupedGalaxyCatalog {
                 bcg_ras.push(bcg_ra);
                 bcg_decs.push(bcg_dec);
                 bcg_redshifts.push(bcg_z);
+                col_ras.push(col_ra);
+                col_decs.push(col_dec);
+                total_absolute_mags.push(local_group.total_absolute_magnitude());
+                total_flux_proxies.push(local_group.flux_proxy());
             }
         }
 
@@ -317,6 +378,10 @@ impl GroupedGalaxyCatalog {
             bcg_ras,
             bcg_decs,
             bcg_redshifts,
+            col_ras,
+            col_decs,
+            total_flux_proxies,
+            total_absolute_mags,
         }
     }
 }
@@ -341,6 +406,10 @@ pub struct GroupCatalog {
     pub bcg_ras: Vec<f64>,
     pub bcg_decs: Vec<f64>,
     pub bcg_redshifts: Vec<f64>,
+    pub col_ras: Vec<f64>,
+    pub col_decs: Vec<f64>,
+    pub total_flux_proxies: Vec<f64>,
+    pub total_absolute_mags: Vec<f64>,
 }
 
 #[cfg(test)]
@@ -480,6 +549,25 @@ mod tests {
         );
         assert_eq!(ra, group.ra_members[1]);
         assert_eq!(dec, group.dec_members[1]);
+    }
+
+    #[test]
+    fn testing_flux_vals() {
+
+        let group = Group {
+            ra_members: vec![23., 23.2, 22.9, 24.0],
+            dec_members: vec![-23., -23.2, -23.2, -23.],
+            redshift_members: vec![0.2, 0.2, 0.2, 0.2],
+            absolute_magnitude_members: vec![-18., -18., -18., -18.],
+            velocity_errors: vec![50., 50., 50., 50.],
+        };
+
+        let result_proxy = group.flux_proxy();
+        let result_mag = group.total_absolute_magnitude();
+        let answer_proxy = 5847496955099.358;
+        let answer_mag = -19.505149978319906;
+        assert_eq!(result_proxy, answer_proxy);
+        assert_eq!(result_mag, answer_mag);
     }
 
     #[test]

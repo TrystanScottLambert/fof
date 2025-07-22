@@ -7,5 +7,7 @@ pub const MSOL_TO_KG: f64 = 1.9891e30;
 pub const PC_TO_METERS: f64 = 3.08568e16;
 pub const G_MSOL_MPC_KMS2: f64 = 4.301179e-09; // MSOL MPC-1 (Km/s)^2
 
-// Programic constsnts
-pub const SCALEMASS: f64 = 25.645;
+// Programic constants
+pub const SCALE_MASS: f64 = 25.645;
+pub const SCALE_FLUX: f64 = 1250.0;
+pub const SOLAR_MAG: f64 = 4.67;
