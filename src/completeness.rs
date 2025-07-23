@@ -96,13 +96,30 @@ mod tests {
         let target = PositionCatalog {ra_deg: vec![20.;4], dec_deg: vec![-20.;4]};
         let observed = PositionCatalog {ra_deg: vec![20.;3], dec_deg: vec![-20.;3]};
         let eval = observed.clone();
-        let ang_dist = vec![0.1;3];
+        let ang_dist = vec![0.000001;3];
 
         let result = calculate_completeness(observed, target, eval, ang_dist);
         for (res, ans) in zip(result, vec![0.75; 3]) {
             assert_eq!(res, ans)
         }
 
+        // obvious 100% case
+        let target = PositionCatalog {ra_deg: vec![20., 30., 40., 50.], dec_deg: vec![-20., -18., 20., 36.]};
+        let observed = PositionCatalog {ra_deg: vec![20., 30., 40., 50.], dec_deg: vec![-20., -18., 20., 36.]};
+        let bad_observed = PositionCatalog {ra_deg: vec![20., 30., 40.], dec_deg: vec![-20., -18., 20.]};
+        let eval = observed.clone();
+        let ang_dist = vec![0.1;4];
+        let ang_dist_bad = vec![0.001; 3];
+
+        let result = calculate_completeness(observed, target.clone(), eval.clone(), ang_dist);
+        for (res, ans) in zip(result, vec![1.0; 4]) {
+            assert_eq!(res, ans)
+        }
+
+        let bad_result = calculate_completeness(bad_observed, target, eval, ang_dist_bad);
+        for (res, ans) in zip(bad_result, vec![1.0; 3]) {
+            assert_eq!(res, ans)
+        }
     }
 
 }
