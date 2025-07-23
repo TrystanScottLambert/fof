@@ -3,8 +3,8 @@ use std::{f64::consts::PI, iter::zip};
 use crate::constants::{G_MSOL_MPC_KMS2, SCALE_FLUX, SCALE_MASS, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
 use crate::spherical_trig_funcs::{
-    convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
-    convert_equitorial_to_cartesian_scaled, euclidean_distance_3d, calculate_projected_separation,
+    calculate_projected_separation, convert_cartesian_to_equitorial,
+    convert_equitorial_to_cartesian, convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
 use crate::stats::{mean, median, quantile_interpolated};
 
@@ -425,7 +425,6 @@ impl GroupedGalaxyCatalog {
                     .enumerate()
                     .filter_map(|(idx, i)| if i == id { Some(idx as i32) } else { None })
                     .collect();
-                
 
                 if local_group_ids.len() == 2 {
                     let local_ra: Vec<f64> = local_group_ids
@@ -449,13 +448,12 @@ impl GroupedGalaxyCatalog {
                         .map(|i| *self.absolute_magnitudes.get(i as usize).unwrap())
                         .collect();
 
-                    
                     let local_group = Group {
                         ra_members: local_ra.clone(),
                         dec_members: local_dec.clone(),
                         redshift_members: local_z.clone(),
                         absolute_magnitude_members: local_mag,
-                        velocity_errors: vec![50.;1], // dummy variable
+                        velocity_errors: vec![50.; 1], // dummy variable
                     };
 
                     let (ra, dec) = local_group.calculate_center_of_light();
@@ -463,13 +461,17 @@ impl GroupedGalaxyCatalog {
                     ids.push(id);
                     idx_1.push(local_group_ids[0]);
                     idx_2.push(local_group_ids[1]);
-                    projected_separation.push(calculate_projected_separation(&local_ra[0], &local_dec[0], &local_ra[1], &local_dec[1]));
+                    projected_separation.push(calculate_projected_separation(
+                        &local_ra[0],
+                        &local_dec[0],
+                        &local_ra[1],
+                        &local_dec[1],
+                    ));
                     velocity_separation.push((local_z[0] - local_z[1]).abs());
                     ra_bar.push(ra);
                     dec_bar.push(dec);
                     redshift_bar.push(local_group.calculate_flux_weighted_redshift());
                     total_absolute_mags.push(local_group.total_absolute_magnitude())
-
                 }
             }
         }
@@ -482,10 +484,9 @@ impl GroupedGalaxyCatalog {
             ra_bar,
             dec_bar,
             redshift_bar,
-            total_absolute_mags
+            total_absolute_mags,
         }
     }
-
 }
 
 /// Struct which represents the group catalog.
@@ -819,6 +820,5 @@ mod tests {
         for (res, ans) in zip(result.velocity_separation, answer_vel_sep) {
             assert!((res - ans).abs() < 1e-7)
         }
-        
     }
 }
