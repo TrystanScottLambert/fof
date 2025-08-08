@@ -160,6 +160,7 @@ pub fn find_links(
     // Parallel outer loop
     let results: Vec<(usize, usize)> = (0..(n - 1))
         .into_par_iter()
+        // .with_min_len(1023)
         .map(|i| {
             let point = [coords[i][0], coords[i][1], coords[i][2]];
             let dist_i = comoving_distances[i];
