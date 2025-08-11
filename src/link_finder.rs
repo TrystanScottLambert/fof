@@ -171,14 +171,14 @@ pub fn find_links(
                 find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
 
             let max_local_pos_ll = {
-                let mut max = 0.0;
-                for &idx in &possible_los_idx {
-                    let val = (linking_lengths_pos[idx] + linking_lengths_pos[i]) * 0.5;
-                    if val > max {
-                        max = val;
-                    }
+                let max = possible_los_idx
+                    .iter()
+                    .map(|&idx| linking_lengths_pos[idx])
+                    .reduce(f64::max);
+                match max {
+                    None => 0.,
+                    Some(val) => (val + linking_lengths_pos[i]) * 0.5,
                 }
-                max
             };
 
             let global_search =
