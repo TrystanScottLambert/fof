@@ -167,7 +167,7 @@ pub fn find_links(
             let lower_lim = dist_i - (max_los_ll + linking_lengths_los[i]) * 0.5;
             let upper_lim = dist_i + (max_los_ll + linking_lengths_los[i]) * 0.5;
 
-            let mut possible_los_idx =
+            let possible_los_idx =
                 find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
 
             let max_local_pos_ll = {
@@ -188,26 +188,29 @@ pub fn find_links(
                 .filter(|&n| n.item > (i as u64))
                 .map(|n| n.item as usize)
                 .collect();
-            possible_los_idx.retain(|item| global_set.contains(item));
 
             let mut local_pairs = Vec::new();
 
-            for j in possible_los_idx {
-                let average_los_ll = (linking_lengths_los[i] + linking_lengths_los[j]) * 0.5;
-                let zrad = (comoving_distances[i] - comoving_distances[j]).abs();
+            possible_los_idx
+                .into_iter()
+                .filter(|j| global_set.contains(j))
+                .for_each(|j| {
+                    let average_los_ll = (linking_lengths_los[i] + linking_lengths_los[j]) * 0.5;
+                    let zrad = (comoving_distances[i] - comoving_distances[j]).abs();
 
-                if zrad <= average_los_ll {
-                    let bgal2 = ((linking_lengths_pos[i] + linking_lengths_pos[j]) * 0.5).powi(2);
+                    if zrad <= average_los_ll {
+                        let bgal2 =
+                            ((linking_lengths_pos[i] + linking_lengths_pos[j]) * 0.5).powi(2);
 
-                    let radproj = (0..3)
-                        .map(|k| (coords[i][k] - coords[j][k]).powi(2))
-                        .sum::<f64>();
+                        let radproj = (0..3)
+                            .map(|k| (coords[i][k] - coords[j][k]).powi(2))
+                            .sum::<f64>();
 
-                    if radproj <= bgal2 {
-                        local_pairs.push((i, j));
+                        if radproj <= bgal2 {
+                            local_pairs.push((i, j));
+                        }
                     }
-                }
-            }
+                });
 
             local_pairs
         })
