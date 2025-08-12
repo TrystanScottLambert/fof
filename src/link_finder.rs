@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use rustc_hash::FxHashSet;
 
 use crate::spherical_trig_funcs::convert_equitorial_to_cartesian;
@@ -143,7 +144,16 @@ pub fn find_links(
     linking_lengths_pos: Vec<f64>,
     linking_lengths_los: Vec<f64>,
 ) -> Vec<(usize, usize)> {
-    let n = ra_array.len();
+
+    let n = {
+        let sizes = vec![ra_array.len(), dec_array.len(), comoving_distances.len(), linking_lengths_los.len(), linking_lengths_pos.len()]
+            .into_iter()
+            .collect::<HashSet<_>>();
+        if sizes.len() != 1 {
+            panic!("Inputs are not of the same size")
+        }
+        sizes.into_iter().next().unwrap()
+    };
 
     let coords: Vec<[f64; 3]> = (0..n)
         .map(|i| convert_equitorial_to_cartesian(&ra_array[i], &dec_array[i]))
