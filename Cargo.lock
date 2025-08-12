@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "fof"
-version = "0.1.8"
+version = "0.1.9"
 dependencies = [
  "csv",
  "integrate",
