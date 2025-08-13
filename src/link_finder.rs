@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use rustc_hash::FxHashSet;
 
 use crate::spherical_trig_funcs::convert_equitorial_to_cartesian;
@@ -144,33 +143,10 @@ pub fn find_links(
     linking_lengths_pos: Vec<f64>,
     linking_lengths_los: Vec<f64>,
 ) -> Vec<(usize, usize)> {
-
-    let n = {
-        let sizes = vec![ra_array.len(), dec_array.len(), comoving_distances.len(), linking_lengths_los.len(), linking_lengths_pos.len()]
-            .into_iter()
-            .collect::<HashSet<_>>();
-        if sizes.len() != 1 {
-            panic!("Inputs are not of the same size")
-        }
-        sizes.into_iter().next().unwrap()
-    };
+    let n = ra_array.len();
 
     let coords: Vec<[f64; 3]> = (0..n)
         .map(|i| convert_equitorial_to_cartesian(&ra_array[i], &dec_array[i]))
-        .collect();
-
-    struct Galaxy {
-        coords: [f64; 3],
-        comoving_distance: f64,
-        ll_pos: f64,
-        ll_los: f64,
-    }
-
-    let galaxies: Vec<Galaxy> = (0..n)
-        .map(|i| {
-            let (coords, dist, pos, los) = (coords[i], comoving_distances[i], linking_lengths_pos[i], linking_lengths_pos[i]);
-            Galaxy{coords: coords, comoving_distance: dist, ll_pos: pos, ll_los: los}
-        })
         .collect();
 
     let global_tree = ImmutableKdTree::new_from_slice(&coords);
@@ -182,12 +158,14 @@ pub fn find_links(
     let dist_argsort = argsort(&comoving_distances);
 
     // Parallel outer loop
-    let results: Vec<(usize, usize)> = galaxies
-        .par_iter()
-        .enumerate()
-        .map(|(i, galaxy)| {
-            let lower_lim = galaxy.comoving_distance - (max_los_ll + galaxy.ll_los) * 0.5;
-            let upper_lim = galaxy.comoving_distance + (max_los_ll + galaxy.ll_los) * 0.5;
+    let results: Vec<(usize, usize)> = (0..(n - 1))
+        .into_par_iter()
+        // .with_min_len(1023)
+        .map(|i| {
+            let point = [coords[i][0], coords[i][1], coords[i][2]];
+            let dist_i = comoving_distances[i];
+            let lower_lim = dist_i - (max_los_ll + linking_lengths_los[i]) * 0.5;
+            let upper_lim = dist_i + (max_los_ll + linking_lengths_los[i]) * 0.5;
 
             let possible_los_idx =
                 find_indices_in_range(&sorted_distances, &dist_argsort, lower_lim, upper_lim, i);
@@ -199,12 +177,12 @@ pub fn find_links(
                     .reduce(f64::max);
                 match max {
                     None => 0.,
-                    Some(val) => (val + galaxy.ll_pos) * 0.5,
+                    Some(val) => (val + linking_lengths_pos[i]) * 0.5,
                 }
             };
 
             let global_search =
-                global_tree.within_unsorted::<SquaredEuclidean>(&galaxy.coords, max_local_pos_ll.powi(2));
+                global_tree.within_unsorted::<SquaredEuclidean>(&point, max_local_pos_ll.powi(2));
             let global_set: FxHashSet<usize> = global_search
                 .iter()
                 .filter(|&n| n.item > (i as u64))
@@ -217,16 +195,15 @@ pub fn find_links(
                 .into_iter()
                 .filter(|j| global_set.contains(j))
                 .for_each(|j| {
-                    let galaxy2 = &galaxies[j];
-                    let average_los_ll = (galaxy.ll_los + galaxy2.ll_los) * 0.5;
-                    let zrad = (galaxy.comoving_distance - galaxy2.comoving_distance).abs();
+                    let average_los_ll = (linking_lengths_los[i] + linking_lengths_los[j]) * 0.5;
+                    let zrad = (comoving_distances[i] - comoving_distances[j]).abs();
 
                     if zrad <= average_los_ll {
                         let bgal2 =
-                            ((galaxy.ll_pos + galaxy2.ll_pos) * 0.5).powi(2);
+                            ((linking_lengths_pos[i] + linking_lengths_pos[j]) * 0.5).powi(2);
 
                         let radproj = (0..3)
-                            .map(|k| (galaxy.coords[k] - galaxy2.coords[k]).powi(2))
+                            .map(|k| (coords[i][k] - coords[j][k]).powi(2))
                             .sum::<f64>();
 
                         if radproj <= bgal2 {
