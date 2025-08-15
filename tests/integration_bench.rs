@@ -1,11 +1,11 @@
-use std::{iter::zip, time::Instant};
+use std::{time::Instant};
 
-use fof::link_finder::{ffl1, find_links};
+use fof::link_finder::{find_links};
 
 #[test]
 fn recovering_ffl1() {
     // read in the data
-    let rdr = csv::Reader::from_path("../test_data_sets/fof/test_links.csv");
+    let rdr = csv::Reader::from_path("tests/test_links.csv");
 
     let mut ras = Vec::new();
     let mut decs = Vec::new();
@@ -23,7 +23,7 @@ fn recovering_ffl1() {
     }
 
     let now_new = Instant::now();
-    let answer = find_links(
+    let _answer = find_links(
         ras.clone(),
         decs.clone(),
         distances.clone(),
@@ -33,5 +33,5 @@ fn recovering_ffl1() {
     let tree_time = now_new.elapsed();
 
 
-    println!("new time: {:?}", tree_time);
+    println!("Time: {:?}", tree_time);
 }

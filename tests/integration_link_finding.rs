@@ -5,7 +5,7 @@ use fof::link_finder::{ffl1, find_links};
 #[test]
 fn recovering_ffl1() {
     // read in the data
-    let rdr = csv::Reader::from_path("../test_data_sets/fof/test_links.csv");
+    let rdr = csv::Reader::from_path("tests/test_links.csv");
 
     let mut ras = Vec::new();
     let mut decs = Vec::new();

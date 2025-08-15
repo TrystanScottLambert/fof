@@ -1,6 +1,6 @@
 use std::{f64::consts::PI, iter::zip};
 
-use crate::constants::{G_MSOL_MPC_KMS2, SCALE_FLUX, SCALE_MASS, SOLAR_MAG, SPEED_OF_LIGHT};
+use crate::constants::{G_MSOL_MPC_KMS2, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
 use crate::spherical_trig_funcs::{
     calculate_projected_separation, convert_cartesian_to_equitorial,
@@ -224,7 +224,8 @@ impl Group {
     }
 
     pub fn flux_proxy(&self) -> f64 {
-        self.total_flux() * SCALE_FLUX * 10.0_f64.powf(0.4 * SOLAR_MAG)
+        // Converting to Solar luminosities
+        self.total_flux() * 10.0_f64.powf(0.4 * SOLAR_MAG)
     }
 
     pub fn total_absolute_magnitude(&self) -> f64 {
@@ -348,7 +349,7 @@ impl GroupedGalaxyCatalog {
                 let [r50_group, rsimga_group, r100_group] =
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
 
-                let raw_mass = SCALE_MASS * (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
+                let raw_mass = (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
 
                 let (col_ra, col_dec) = local_group.calculate_center_of_light();
 
@@ -679,7 +680,7 @@ mod tests {
 
         let result_proxy = group.flux_proxy();
         let result_mag = group.total_absolute_magnitude();
-        let answer_proxy = 5847496955099.358;
+        let answer_proxy = 4677997564.079487;
         let answer_mag = -19.505149978319906;
         assert_eq!(result_proxy, answer_proxy);
         assert_eq!(result_mag, answer_mag);
