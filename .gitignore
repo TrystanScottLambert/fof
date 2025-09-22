@@ -1,2 +1,5 @@
 /target
 tests/*.csv
+.Rproj.user
+.vscode
+.DS_store
