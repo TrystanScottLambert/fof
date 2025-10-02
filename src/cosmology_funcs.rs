@@ -25,7 +25,7 @@ pub struct Cosmology {
     pub h0: f64,
 }
 
-/// Distance type either Angualr or Comoving.
+/// Distance type either Angular or Comoving.
 #[derive(PartialEq)]
 pub enum DistanceType {
     Angular,
