@@ -1,5 +1,7 @@
 use std::{f64::consts::PI, iter::zip};
 
+use roots::FloatType;
+
 use crate::constants::{G_MSOL_MPC_KMS2, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
 use crate::spherical_trig_funcs::{
@@ -7,6 +9,14 @@ use crate::spherical_trig_funcs::{
     convert_equitorial_to_cartesian, convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
 use crate::stats::{mean, median, quantile_interpolated};
+
+/// Calculatingt the total mass of the group from the R_g and 1d velocity dispersion
+/// 
+/// This is from Equation 8 of Tempel+2014 and assumes the viral theorem.
+/// The gravitational_radius must be in Mpc and the los_velocity_dispersion is in km/s
+fn calculate_total_mass(gravitational_radius: &f64, los_velocity_dispersion: &f64) -> f64 {
+    2.325e12 * gravitational_radius * ((3_f64.powf(1./3.)) * los_velocity_dispersion/100.).powi(2)
+}
 
 /// A Group struct which stores the necessary values required for the group catalog.
 pub struct Group {
@@ -126,6 +136,33 @@ impl Group {
 
         // Return the original index
         temp_indices[max_flux_idx]
+    }
+
+    /// Dispersion of the plane of sky
+    ///
+    /// Calculating the dispersion of the plane of sky using Equation 4 from Tempel+2014
+    /// Using the iterative center as the definition of center. 
+    /// In units of Mpc
+    pub fn calculate_sky_distribution(&self, cosmo: &Cosmology) -> f64 {
+        let iterative_idx = self.calculate_iterative_center_idx();
+        let group_ra = self.ra_members[iterative_idx];
+        let group_dec = self.dec_members[iterative_idx];
+        let projected_distances: Vec<f64> = self
+            .ra_members
+            .iter()
+            .zip(self.dec_members.iter())
+            .map(|(ra, dec)| {
+                calculate_projected_separation(ra, dec, &group_ra, &group_dec)
+                    * 3600. // deg to arcseconds
+                    * cosmo.kpc_per_arcsecond_comoving(self.median_redshift())
+            })
+            .collect();
+        ((1. / ((self.ra_members.len() as f64 * 2.) * (1. + self.median_redshift()).powi(2)))
+            * projected_distances
+                .iter()
+                .map(|kpc| kpc / 1000.) // to Mpc
+                .sum::<f64>())
+        .sqrt()
     }
 
     /// Several radii measurements of the group.
@@ -269,6 +306,7 @@ impl GroupedGalaxyCatalog {
         let mut velocity_dispersions: Vec<f64> = Vec::new();
         let mut velocity_dispersion_errs: Vec<f64> = Vec::new();
         let mut raw_masses: Vec<f64> = Vec::new();
+        let mut estimated_masses: Vec<f64> = Vec::new();
         let mut bcg_idxs: Vec<usize> = Vec::new();
         let mut bcg_ras: Vec<f64> = Vec::new();
         let mut bcg_decs: Vec<f64> = Vec::new();
@@ -353,6 +391,10 @@ impl GroupedGalaxyCatalog {
 
                 let (col_ra, col_dec) = local_group.calculate_center_of_light();
 
+                let sky_disp = local_group.calculate_sky_distribution(cosmo);
+                let grav_rad = 4.582 * sky_disp;
+                let m_total = calculate_total_mass(&grav_rad, &velocity_disp);
+
                 id_groups.push(id);
                 iterative_ras.push(ra_group);
                 iterative_decs.push(dec_group);
@@ -367,6 +409,7 @@ impl GroupedGalaxyCatalog {
                 velocity_dispersions.push(velocity_disp);
                 velocity_dispersion_errs.push(velocity_disp_err);
                 raw_masses.push(raw_mass);
+                estimated_masses.push(m_total);
                 bcg_idxs.push(global_bcg_idx);
                 bcg_ras.push(bcg_ra);
                 bcg_decs.push(bcg_dec);
@@ -393,6 +436,7 @@ impl GroupedGalaxyCatalog {
             velocity_dispersion_gap: velocity_dispersions,
             velocity_dispersion_gap_err: velocity_dispersion_errs,
             raw_masses,
+            estimated_masses,
             bcg_idxs,
             bcg_ras,
             bcg_decs,
@@ -506,6 +550,7 @@ pub struct GroupCatalog {
     pub velocity_dispersion_gap: Vec<f64>,
     pub velocity_dispersion_gap_err: Vec<f64>,
     pub raw_masses: Vec<f64>,
+    pub estimated_masses: Vec<f64>,
     pub bcg_idxs: Vec<usize>,
     pub bcg_ras: Vec<f64>,
     pub bcg_decs: Vec<f64>,
