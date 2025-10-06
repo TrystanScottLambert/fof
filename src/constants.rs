@@ -9,3 +9,6 @@ pub const G_MSOL_MPC_KMS2: f64 = 4.301179e-09; // MSOL MPC-1 (Km/s)^2
 
 // Programic constants
 pub const SOLAR_MAG: f64 = 4.67;
+
+// Trig constants
+pub const RADIAN_IN_ARCSECONDS: f64 = 206264.8062471;

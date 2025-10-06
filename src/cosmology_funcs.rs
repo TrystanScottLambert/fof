@@ -6,7 +6,7 @@ use libm::{asin, asinh, log10, sinh};
 use roots::SimpleConvergency;
 use roots::find_root_brent;
 
-use crate::constants::{G, KM_TO_METERS, MPC_TO_METERS, MSOL_TO_KG, PC_TO_METERS, SPEED_OF_LIGHT};
+use crate::constants::{G, KM_TO_METERS, MPC_TO_METERS, MSOL_TO_KG, PC_TO_METERS, SPEED_OF_LIGHT, RADIAN_IN_ARCSECONDS};
 
 /// Determines the zero point of the root function. This can be used to calcualte the inverse
 /// of cosmological properties, i.e., the z value at which they occur.
@@ -179,6 +179,21 @@ impl Cosmology {
     pub fn inverse_lumdist(&self, luminosity_distance: f64) -> f64 {
         let f = |z: f64| self.luminosity_distance(z) - luminosity_distance;
         inverse(f)
+    }
+
+    /// Angular diameter distance in Mpc at a given redshift.
+    pub fn angular_diameter_distance(&self, z: f64) -> f64 {
+        self.comoving_transverse_distance(z) / (z + 1.)
+    }
+
+    /// The Angular scale of comoving kpc to arcseconds. kpc/"
+    pub fn kpc_per_arcsecond_comoving(&self, z: f64) -> f64 {
+        RADIAN_IN_ARCSECONDS / (self.comoving_transverse_distance(z) * 1000.) // conver Mpc to Kpc
+    }
+
+    /// Ther Angular scale of physical kpc to arcseconds.  kpc/"
+    pub fn kpc_per_arcsecond_physical(&self, z: f64) -> f64 {
+        RADIAN_IN_ARCSECONDS / (self.angular_diameter_distance(z) * 1000.)
     }
 }
 
