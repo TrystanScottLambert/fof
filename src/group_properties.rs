@@ -8,10 +8,11 @@ use crate::spherical_trig_funcs::{
 };
 use crate::stats::{mean, median, quantile_interpolated};
 
-/// Calculatingt the total mass of the group from the R_g and 1d velocity dispersion
+/// Calculating the total mass of the group from the R_g and 1d velocity dispersion
 ///
 /// This is from Equation 8 of Tempel+2014 and assumes the viral theorem.
 /// The gravitational_radius must be in Mpc and the los_velocity_dispersion is in km/s
+/// Returns the mass in solar masses
 fn calculate_total_mass(gravitational_radius: &f64, los_velocity_dispersion: &f64) -> f64 {
     2.325e12
         * gravitational_radius
@@ -160,7 +161,7 @@ impl Group {
         ((1. / ((self.ra_members.len() as f64 * 2.) * (1. + self.median_redshift()).powi(2)))
             * projected_distances
                 .iter()
-                .map(|kpc| kpc / 1000.) // to Mpc
+                .map(|kpc| (kpc / 1000.).powi(2)) // to Mpc
                 .sum::<f64>())
         .sqrt()
     }
