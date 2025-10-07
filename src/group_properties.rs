@@ -1,4 +1,5 @@
 use std::{f64::consts::PI, iter::zip};
+use rayon::prelude::*;
 
 use crate::constants::{G_MSOL_MPC_KMS2, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
@@ -54,14 +55,14 @@ impl Group {
 
         let mut velocities: Vec<f64> = self
             .redshift_members
-            .iter()
+            .par_iter()
             .map(|z| (z * SPEED_OF_LIGHT) / (1. + median_redshift))
             .collect();
 
         velocities.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let gaps: Vec<f64> = velocities.windows(2).map(|w| w[1] - w[0]).collect();
         let i: Vec<usize> = (1..n).collect();
-        let weights: Vec<usize> = i.iter().map(|val| val * (n - val)).collect();
+        let weights: Vec<usize> = i.par_iter().map(|val| val * (n - val)).collect();
 
         let sum: f64 = zip(weights, gaps).map(|(a, b)| a as f64 * b).sum();
         let sigma_gap: f64 = ((PI.sqrt()) / (nf64 * (nf64 - 1.))) * sum;
@@ -84,7 +85,7 @@ impl Group {
 
         let flux: Vec<f64> = self
             .absolute_magnitude_members
-            .iter()
+            .par_iter()
             .map(|mag| 10_f64.powf(-0.4 * mag))
             .collect();
 
@@ -94,7 +95,7 @@ impl Group {
         let mut temp_indices: Vec<usize> = (0..coords_cartesian.len()).collect();
 
         while temp_flux.len() > 2 {
-            let flux_sum: f64 = temp_flux.iter().cloned().sum();
+            let flux_sum: f64 = temp_flux.par_iter().cloned().sum();
 
             let center: [f64; 3] = (0..3)
                 .map(|i| {
@@ -110,12 +111,12 @@ impl Group {
                 .unwrap();
 
             let distances: Vec<f64> = temp_coords
-                .iter()
+                .par_iter()
                 .map(|coord| euclidean_distance_3d(coord, &center))
                 .collect();
 
             if let Some((max_idx, _)) = distances
-                .iter()
+                .par_iter()
                 .enumerate()
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             {
@@ -129,7 +130,7 @@ impl Group {
 
         // Find the index of the remaining object with highest flux
         let max_flux_idx = temp_flux
-            .iter()
+            .par_iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(i, _)| i)
@@ -150,8 +151,8 @@ impl Group {
         let group_dec = self.dec_members[iterative_idx];
         let projected_distances: Vec<f64> = self
             .ra_members
-            .iter()
-            .zip(self.dec_members.iter())
+            .par_iter()
+            .zip(self.dec_members.par_iter())
             .map(|(ra, dec)| {
                 angular_separation(ra, dec, &group_ra, &group_dec)
                     * 3600. // deg to arcseconds
@@ -160,7 +161,7 @@ impl Group {
             .collect();
         ((1. / ((self.ra_members.len() as f64 * 2.) * (1. + self.median_redshift()).powi(2)))
             * projected_distances
-                .iter()
+                .par_iter()
                 .map(|kpc| (kpc / 1000.).powi(2)) // to Mpc
                 .sum::<f64>())
         .sqrt()
@@ -184,7 +185,7 @@ impl Group {
 
         let mut distances: Vec<f64> = self
             .ra_members
-            .iter()
+            .par_iter()
             .zip(&self.dec_members)
             .map(|(&ra, &dec)| {
                 let pos = convert_equitorial_to_cartesian_scaled(ra, dec, group_center_dist);
@@ -204,32 +205,32 @@ impl Group {
     pub fn calculate_center_of_light(&self) -> (f64, f64) {
         let fluxes: Vec<f64> = self
             .absolute_magnitude_members
-            .iter()
+            .par_iter()
             .map(|mag| 10.0_f64.powf(-0.4 * mag))
             .collect();
-        let sum_flux: f64 = fluxes.iter().sum();
+        let sum_flux: f64 = fluxes.par_iter().sum();
         let coords_cartesian: Vec<[f64; 3]> =
             zip(self.ra_members.clone(), self.dec_members.clone())
                 .map(|(ra, dec)| convert_equitorial_to_cartesian(&ra, &dec))
                 .collect();
 
         let weighted_x = coords_cartesian
-            .iter()
-            .zip(fluxes.iter())
+            .par_iter()
+            .zip(fluxes.par_iter())
             .map(|(coord, flux)| coord[0] * flux)
             .sum::<f64>()
             / sum_flux;
 
         let weighted_y = coords_cartesian
-            .iter()
-            .zip(fluxes.iter())
+            .par_iter()
+            .zip(fluxes.par_iter())
             .map(|(coord, flux)| coord[1] * flux)
             .sum::<f64>()
             / sum_flux;
 
         let weighted_z = coords_cartesian
-            .iter()
-            .zip(fluxes.iter())
+            .par_iter()
+            .zip(fluxes.par_iter())
             .map(|(coord, flux)| coord[2] * flux)
             .sum::<f64>()
             / sum_flux;
@@ -241,14 +242,14 @@ impl Group {
     pub fn calculate_flux_weighted_redshift(&self) -> f64 {
         let fluxes: Vec<f64> = self
             .absolute_magnitude_members
-            .iter()
+            .par_iter()
             .map(|mag| 10_f64.powf(-0.4 * mag))
             .collect();
-        let sum_flux: f64 = fluxes.iter().sum();
+        let sum_flux: f64 = fluxes.par_iter().sum();
 
         self.redshift_members
-            .iter()
-            .zip(fluxes.iter())
+            .par_iter()
+            .zip(fluxes.par_iter())
             .map(|(red, flux)| red * flux)
             .sum::<f64>()
             / sum_flux
@@ -256,7 +257,7 @@ impl Group {
 
     pub fn total_flux(&self) -> f64 {
         self.absolute_magnitude_members
-            .iter()
+            .par_iter()
             .map(|mag| 10.0_f64.powf(-0.4 * mag))
             .sum()
     }
