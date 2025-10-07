@@ -3,10 +3,12 @@ use std::f64::consts::PI;
 
 use integrate::adaptive_quadrature;
 use libm::{asin, asinh, log10, sinh};
-use roots::SimpleConvergency;
 use roots::find_root_brent;
+use roots::SimpleConvergency;
 
-use crate::constants::{G, KM_TO_METERS, MPC_TO_METERS, MSOL_TO_KG, PC_TO_METERS, SPEED_OF_LIGHT, RADIAN_IN_ARCSECONDS};
+use crate::constants::{
+    G, KM_TO_METERS, MPC_TO_METERS, MSOL_TO_KG, PC_TO_METERS, RADIAN_IN_ARCSECONDS, SPEED_OF_LIGHT,
+};
 
 /// Determines the zero point of the root function. This can be used to calcualte the inverse
 /// of cosmological properties, i.e., the z value at which they occur.
@@ -19,7 +21,7 @@ fn inverse(root_function: impl Fn(f64) -> f64) -> f64 {
 }
 
 /// A Flat lambda CDM cosmology object.
-/// 
+///
 /// # Parameters
 /// *  redshift_array an array of multiple redshift values.
 /// *  omega_m Mass density (often 0.3 in LCDM).
@@ -188,12 +190,12 @@ impl Cosmology {
 
     /// The Angular scale of comoving kpc to arcseconds. kpc/"
     pub fn kpc_per_arcsecond_comoving(&self, z: f64) -> f64 {
-        RADIAN_IN_ARCSECONDS / (self.comoving_transverse_distance(z) * 1000.) // conver Mpc to Kpc
+        (self.comoving_transverse_distance(z) * 1000.) / RADIAN_IN_ARCSECONDS // convert Mpc to Kpc
     }
 
     /// Ther Angular scale of physical kpc to arcseconds.  kpc/"
     pub fn kpc_per_arcsecond_physical(&self, z: f64) -> f64 {
-        RADIAN_IN_ARCSECONDS / (self.angular_diameter_distance(z) * 1000.)
+        (self.angular_diameter_distance(z) * 1000.) / RADIAN_IN_ARCSECONDS
     }
 }
 
@@ -473,6 +475,86 @@ mod tests {
             .collect();
         for (r, a) in zip(results, redshifts) {
             assert!((r - a).abs() < 1e-5)
+        }
+    }
+
+    #[test]
+    fn testing_angular_diameter_distance() {
+        let cosmo = Cosmology {
+            omega_m: 0.3,
+            omega_k: 0.,
+            omega_l: 0.7,
+            h0: 100.,
+        };
+        let redshifts = [0.01, 0.1, 0.2, 1., 2., 5.];
+        let answers = [
+            29.61549314,
+            266.2892194,
+            476.42188945,
+            1156.34008206,
+            1208.63448403,
+            907.1265578,
+        ];
+
+        let results: Vec<f64> = redshifts
+            .iter()
+            .map(|&z| cosmo.angular_diameter_distance(z))
+            .collect();
+        for (r, a) in zip(results, answers) {
+            assert!((r - a).abs() < 1e-3)
+        }
+    }
+
+    #[test]
+    fn testing_kpc_scale_physical() {
+        let cosmo = Cosmology {
+            omega_m: 0.3,
+            omega_k: 0.,
+            omega_l: 0.7,
+            h0: 100.,
+        };
+        let redshifts = [0.01, 0.1, 0.2, 1., 2., 5.];
+        let answers = [
+            0.14357996, 1.29100657, 2.3097585, 5.60609492, 5.85962533, 4.39787366,
+        ];
+
+        let results: Vec<f64> = redshifts
+            .iter()
+            .map(|&z| cosmo.kpc_per_arcsecond_physical(z))
+            .collect();
+        for (r, a) in zip(results, answers) {
+            dbg!(a);
+            dbg!(r);
+            assert!((r - a).abs() < 1e-3)
+        }
+    }
+
+    #[test]
+    fn testing_kpc_scale_comoving() {
+        let cosmo = Cosmology {
+            omega_m: 0.3,
+            omega_k: 0.,
+            omega_l: 0.7,
+            h0: 100.,
+        };
+        let redshifts = [0.01, 0.1, 0.2, 1., 2., 5.];
+        let answers = [
+            0.14501576,
+            1.42010722,
+            2.7717102,
+            11.21218984,
+            17.578876,
+            26.38724194,
+        ];
+
+        let results: Vec<f64> = redshifts
+            .iter()
+            .map(|&z| cosmo.kpc_per_arcsecond_comoving(z))
+            .collect();
+        for (r, a) in zip(results, answers) {
+            dbg!(a);
+            dbg!(r);
+            assert!((r - a).abs() < 1e-3)
         }
     }
 }
