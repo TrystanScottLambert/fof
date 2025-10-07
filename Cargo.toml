@@ -1,6 +1,6 @@
 [package]
 name = "fof"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2021"
 description = "A fast and flexible friends-of-friends algorithm for idenitfying galaxy groups in redshift surveys. This crate holds the core functionality which can be wrapped in other languages."
 license = "MIT"
