@@ -4,7 +4,7 @@ use rayon::prelude::*;
 use crate::constants::{G_MSOL_MPC_KMS2, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
 use crate::spherical_trig_funcs::{
-    angular_separation, convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
+    angular_separation_small_angle, convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
     convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
 use crate::stats::{mean, median, quantile_interpolated};
@@ -95,7 +95,7 @@ impl Group {
         let mut temp_indices: Vec<usize> = (0..coords_cartesian.len()).collect();
 
         while temp_flux.len() > 2 {
-            let flux_sum: f64 = temp_flux.par_iter().cloned().sum();
+            let flux_sum: f64 = temp_flux.iter().cloned().sum();
 
             let center: [f64; 3] = (0..3)
                 .map(|i| {
@@ -116,7 +116,7 @@ impl Group {
                 .collect();
 
             if let Some((max_idx, _)) = distances
-                .par_iter()
+                .iter()
                 .enumerate()
                 .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             {
@@ -130,7 +130,7 @@ impl Group {
 
         // Find the index of the remaining object with highest flux
         let max_flux_idx = temp_flux
-            .par_iter()
+            .iter()
             .enumerate()
             .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
             .map(|(i, _)| i)
@@ -145,16 +145,13 @@ impl Group {
     /// Calculating the dispersion of the plane of sky using Equation 4 from Tempel+2014
     /// Using the iterative center as the definition of center.
     /// In units of Mpc
-    pub fn calculate_sky_distribution(&self, cosmo: &Cosmology) -> f64 {
-        let iterative_idx = self.calculate_iterative_center_idx();
-        let group_ra = self.ra_members[iterative_idx];
-        let group_dec = self.dec_members[iterative_idx];
+    pub fn calculate_sky_distribution(&self, cosmo: &Cosmology, group_ra: &f64, group_dec: &f64) -> f64 {
         let projected_distances: Vec<f64> = self
             .ra_members
-            .par_iter()
-            .zip(self.dec_members.par_iter())
+            .iter()
+            .zip(self.dec_members.iter())
             .map(|(ra, dec)| {
-                angular_separation(ra, dec, &group_ra, &group_dec)
+                angular_separation_small_angle(ra, dec, group_ra, group_dec)
                     * 3600. // deg to arcseconds
                     * cosmo.kpc_per_arcsecond_comoving(self.median_redshift())
             })
@@ -185,7 +182,7 @@ impl Group {
 
         let mut distances: Vec<f64> = self
             .ra_members
-            .par_iter()
+            .iter()
             .zip(&self.dec_members)
             .map(|(&ra, &dec)| {
                 let pos = convert_equitorial_to_cartesian_scaled(ra, dec, group_center_dist);
@@ -208,29 +205,29 @@ impl Group {
             .par_iter()
             .map(|mag| 10.0_f64.powf(-0.4 * mag))
             .collect();
-        let sum_flux: f64 = fluxes.par_iter().sum();
+        let sum_flux: f64 = fluxes.iter().sum();
         let coords_cartesian: Vec<[f64; 3]> =
             zip(self.ra_members.clone(), self.dec_members.clone())
                 .map(|(ra, dec)| convert_equitorial_to_cartesian(&ra, &dec))
                 .collect();
 
         let weighted_x = coords_cartesian
-            .par_iter()
-            .zip(fluxes.par_iter())
+            .iter()
+            .zip(fluxes.iter())
             .map(|(coord, flux)| coord[0] * flux)
             .sum::<f64>()
             / sum_flux;
 
         let weighted_y = coords_cartesian
-            .par_iter()
-            .zip(fluxes.par_iter())
+            .iter()
+            .zip(fluxes.iter())
             .map(|(coord, flux)| coord[1] * flux)
             .sum::<f64>()
             / sum_flux;
 
         let weighted_z = coords_cartesian
-            .par_iter()
-            .zip(fluxes.par_iter())
+            .iter()
+            .zip(fluxes.iter())
             .map(|(coord, flux)| coord[2] * flux)
             .sum::<f64>()
             / sum_flux;
@@ -245,11 +242,11 @@ impl Group {
             .par_iter()
             .map(|mag| 10_f64.powf(-0.4 * mag))
             .collect();
-        let sum_flux: f64 = fluxes.par_iter().sum();
+        let sum_flux: f64 = fluxes.iter().sum();
 
         self.redshift_members
-            .par_iter()
-            .zip(fluxes.par_iter())
+            .iter()
+            .zip(fluxes.iter())
             .map(|(red, flux)| red * flux)
             .sum::<f64>()
             / sum_flux
@@ -393,7 +390,7 @@ impl GroupedGalaxyCatalog {
 
                 let (col_ra, col_dec) = local_group.calculate_center_of_light();
 
-                let sky_disp = local_group.calculate_sky_distribution(cosmo);
+                let sky_disp = local_group.calculate_sky_distribution(cosmo, &ra_group, &dec_group);
                 let grav_rad = 4.582 * sky_disp;
                 let m_total = calculate_total_mass(&grav_rad, &velocity_disp);
 
@@ -508,7 +505,7 @@ impl GroupedGalaxyCatalog {
                     ids.push(id);
                     idx_1.push(local_group_ids[0]);
                     idx_2.push(local_group_ids[1]);
-                    projected_separation.push(angular_separation(
+                    projected_separation.push(angular_separation_small_angle(
                         &local_ra[0],
                         &local_dec[0],
                         &local_ra[1],

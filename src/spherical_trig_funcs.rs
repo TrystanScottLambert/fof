@@ -68,6 +68,62 @@ pub fn angular_separation(lon_1: &f64, lat_1: &f64, lon_2: &f64, lat_2: &f64) ->
     atan2(hypot(num1, num2), denominator).to_degrees()
 }
 
+/// A quick angular separation which works for small angles.
+///
+/// Angles must be in degrees and the separation is returned in degrees.
+/// Only use for angles less than a degree.
+///
+pub fn angular_separation_haversine(
+    lon1_deg: &f64,
+    lat1_deg: &f64,
+    lon2_deg: &f64,
+    lat2_deg: &f64,
+) -> f64 {
+    // Convert to radians
+    let lon1 = lon1_deg.to_radians();
+    let lat1 = lat1_deg.to_radians();
+    let lon2 = lon2_deg.to_radians();
+    let lat2 = lat2_deg.to_radians();
+
+    // Differences
+    let dlat = lat2 - lat1;
+    let dlon = lon2 - lon1;
+
+    // Haversine formula
+    let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().asin();
+
+    // Convert back to degrees
+    c.to_degrees()
+}
+
+/// Very quick angular separation using the small angle formula.
+///
+/// Only use for very small angles. Inputs and outputs are in degrees.
+pub fn angular_separation_small_angle(
+    lon1_deg: &f64,
+    lat1_deg: &f64,
+    lon2_deg: &f64,
+    lat2_deg: &f64,
+) -> f64 {
+    // Convert to radians
+    let lon1 = lon1_deg.to_radians();
+    let lat1 = lat1_deg.to_radians();
+    let lon2 = lon2_deg.to_radians();
+    let lat2 = lat2_deg.to_radians();
+
+    // Differences
+    let dlat = lat2 - lat1;
+    let dlon = lon2 - lon1;
+
+    // Haversine formula
+    let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+    let c = 2.0 * a.sqrt().asin();
+
+    // Convert back to degrees
+    c.to_degrees()
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -175,5 +231,21 @@ mod test {
             dbg!(answers[i]);
             assert!((res - answers[i]).abs() < 1e-5)
         }
+    }
+
+    #[test]
+    fn test_small_angle_approx() {
+        // testing that the small angle version is close to the accurate one for small angles.
+        let ra1 = 0.1;
+        let ra2 = 0.2;
+        let dec1 = -20.;
+        let dec2 = -20.;
+        let res = angular_separation_haversine(&ra1, &dec1, &ra2, &dec2);
+        dbg!(res);
+        dbg!(angular_separation(&ra1, &dec1, &ra2, &dec2));
+        assert!((angular_separation(&ra1, &dec1, &ra2, &dec2) - res).abs() < 1e-5);
+
+        let res = angular_separation_small_angle(&ra1, &dec1, &ra2, &dec2);
+        assert!((angular_separation(&ra1, &dec1, &ra2, &dec2) - res).abs() < 1e-5);
     }
 }
