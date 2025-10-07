@@ -1,21 +1,21 @@
 use std::{f64::consts::PI, iter::zip};
 
-use roots::FloatType;
-
 use crate::constants::{G_MSOL_MPC_KMS2, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
 use crate::spherical_trig_funcs::{
-    calculate_projected_separation, convert_cartesian_to_equitorial,
-    convert_equitorial_to_cartesian, convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
+    angular_separation, convert_cartesian_to_equitorial, convert_equitorial_to_cartesian,
+    convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
 use crate::stats::{mean, median, quantile_interpolated};
 
 /// Calculatingt the total mass of the group from the R_g and 1d velocity dispersion
-/// 
+///
 /// This is from Equation 8 of Tempel+2014 and assumes the viral theorem.
 /// The gravitational_radius must be in Mpc and the los_velocity_dispersion is in km/s
 fn calculate_total_mass(gravitational_radius: &f64, los_velocity_dispersion: &f64) -> f64 {
-    2.325e12 * gravitational_radius * ((3_f64.powf(1./3.)) * los_velocity_dispersion/100.).powi(2)
+    2.325e12
+        * gravitational_radius
+        * ((3_f64.powf(1. / 3.)) * los_velocity_dispersion / 100.).powi(2)
 }
 
 /// A Group struct which stores the necessary values required for the group catalog.
@@ -141,7 +141,7 @@ impl Group {
     /// Dispersion of the plane of sky
     ///
     /// Calculating the dispersion of the plane of sky using Equation 4 from Tempel+2014
-    /// Using the iterative center as the definition of center. 
+    /// Using the iterative center as the definition of center.
     /// In units of Mpc
     pub fn calculate_sky_distribution(&self, cosmo: &Cosmology) -> f64 {
         let iterative_idx = self.calculate_iterative_center_idx();
@@ -152,7 +152,7 @@ impl Group {
             .iter()
             .zip(self.dec_members.iter())
             .map(|(ra, dec)| {
-                calculate_projected_separation(ra, dec, &group_ra, &group_dec)
+                angular_separation(ra, dec, &group_ra, &group_dec)
                     * 3600. // deg to arcseconds
                     * cosmo.kpc_per_arcsecond_comoving(self.median_redshift())
             })
@@ -506,7 +506,7 @@ impl GroupedGalaxyCatalog {
                     ids.push(id);
                     idx_1.push(local_group_ids[0]);
                     idx_2.push(local_group_ids[1]);
-                    projected_separation.push(calculate_projected_separation(
+                    projected_separation.push(angular_separation(
                         &local_ra[0],
                         &local_dec[0],
                         &local_ra[1],

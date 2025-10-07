@@ -1,4 +1,4 @@
-use libm::{asin, atan2};
+use libm::{asin, atan2, hypot};
 
 // assuming a unit sphere
 pub fn convert_equitorial_to_cartesian(ra_deg: &f64, dec_deg: &f64) -> [f64; 3] {
@@ -46,11 +46,26 @@ pub fn chord_distance(angular_separation_degrees: f64) -> f64 {
     2. * (angular_separation_degrees.to_radians() / 2.).sin()
 }
 
-/// projected separation between two galaxies. Angular scale only
-pub fn calculate_projected_separation(ra_deg_1: &f64, dec_deg_1: &f64, ra_deg_2: &f64, dec_deg_2: &f64) -> f64 {
-    let point_1 = convert_equitorial_to_cartesian(ra_deg_1, dec_deg_1);
-    let point_2 = convert_equitorial_to_cartesian(ra_deg_2, dec_deg_2);
-    euclidean_distance_3d(&point_1, &point_2)
+/// Copy of the astropy angular_separation function.
+///
+/// Arguments must be in degrees and the separation is in degrees.
+/// Using the vincenty formula which is accurate but computationally expensive.
+pub fn angular_separation(lon_1: &f64, lat_1: &f64, lon_2: &f64, lat_2: &f64) -> f64 {
+    let lon_1_rad = lon_1.to_radians();
+    let lat_1_rad = lat_1.to_radians();
+    let lon_2_rad = lon_2.to_radians();
+    let lat_2_rad = lat_2.to_radians();
+    let sdlon = (lon_2_rad - lon_1_rad).sin();
+    let cdlon = (lon_2_rad - lon_1_rad).cos();
+    let slat1 = (lat_1_rad).sin();
+    let slat2 = (lat_2_rad).sin();
+    let clat1 = (lat_1_rad).cos();
+    let clat2 = (lat_2_rad).cos();
+
+    let num1 = clat2 * sdlon;
+    let num2 = clat1 * slat2 - slat1 * clat2 * cdlon;
+    let denominator = slat1 * slat2 + clat1 * clat2 * cdlon;
+    atan2(hypot(num1, num2), denominator).to_degrees()
 }
 
 #[cfg(test)]
@@ -143,6 +158,22 @@ mod test {
         let answers = [0., 0.347296355, 0.517638090, 2.];
         for (res, ans) in zip(results, answers) {
             assert!((res - ans).abs() < 1e-7)
+        }
+    }
+
+    #[test]
+    fn test_projected_separation() {
+        let ra_1s = [-20., -5., 0., 90., 359.];
+        let ra_2s = [-20.5, 20., 30., 40., 50.];
+        let dec_1s = [-90., -45., 0., 45., 90.];
+        let dec_2s = [-45., 0., 5., 10., 20.];
+        let answers = [45., 50.14429257, 30.37550653, 55.22172917, 70.];
+
+        for i in 0..5 {
+            let res = angular_separation(&ra_1s[i], &dec_1s[i], &ra_2s[i], &dec_2s[i]);
+            dbg!(res);
+            dbg!(answers[i]);
+            assert!((res - answers[i]).abs() < 1e-5)
         }
     }
 }
