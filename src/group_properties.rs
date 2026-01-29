@@ -9,12 +9,18 @@ use crate::spherical_trig_funcs::{
 };
 use crate::stats::{mean, median, quantile_interpolated};
 
+/// Calculating the raw mass as determined in Robotham+2011. This should be scaled by a
+/// constant scalar "A" which can be determined by the user. A=10 is default.
+fn calculate_raw_mass(radius: f64, los_velocity_dispersion: f64) -> f64 {
+    (radius * los_velocity_dispersion.powi(2)) / G_MSOL_MPC_KMS2
+}
+
 /// Calculating the total mass of the group from the R_g and 1d velocity dispersion
 ///
 /// This is from Equation 8 of Tempel+2014 and assumes the viral theorem.
 /// The gravitational_radius must be in Mpc and the los_velocity_dispersion is in km/s
 /// Returns the mass in solar masses
-fn calculate_total_mass(gravitational_radius: &f64, los_velocity_dispersion: &f64) -> f64 {
+fn calculate_total_mass(gravitational_radius: f64, los_velocity_dispersion: f64) -> f64 {
     2.325e12
         * gravitational_radius
         * ((3_f64.powf(1. / 3.)) * los_velocity_dispersion / 100.).powi(2)
@@ -420,13 +426,13 @@ impl GroupedGalaxyCatalog {
                 let [r50_group, rsimga_group, r100_group] =
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
 
-                let raw_mass = (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
+                let raw_mass = calculate_raw_mass(r50_group, velocity_disp);
 
                 let (col_ra, col_dec) = local_group.calculate_center_of_light();
 
                 let sky_disp = local_group.calculate_sky_distribution(cosmo, &ra_group, &dec_group);
                 let grav_rad = 4.582 * sky_disp;
-                let m_total = calculate_total_mass(&grav_rad, &velocity_disp);
+                let m_total = calculate_total_mass(grav_rad, velocity_disp);
                 let m_vd_correct =
                     calculate_velocity_disp_corr_mass(r100_group, velocity_disp, cosmo);
 
