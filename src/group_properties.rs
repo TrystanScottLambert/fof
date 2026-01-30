@@ -54,6 +54,19 @@ fn calculate_velocity_disp_corr_mass(
     correction_factor * los_velocity_dispersion.powi(2) * radius / G_MSOL_MPC_KMS2
 }
 
+/// All possible mass estimation methods
+enum MassMethod {
+    Robotham,
+    Tempel,
+    Vankeempen,
+}
+/// Determines the error function for a particular mass method.
+///
+/// Following Driver+2022, we take galaxies with N>20 and and iteratively remove the faintiest
+/// member and recalculate the mass. All these tracks are then used to find the median line and
+/// uncertainty as a function of multiplicity.
+fn calculate_error_function(method: MassMethod, groups: Vec<Group>) {}
+
 /// A Group struct which stores the necessary values required for the group catalog.
 pub struct Group {
     pub ra_members: Vec<f64>,
@@ -81,6 +94,7 @@ impl Group {
 
     /// The velocity dispersion as calculated through the gapper method.
     /// The Sigma error would be in km/s.
+    /// Returns the sigma value and the error as a tupple
     pub fn velocity_dispersion_gapper(&self) -> (f64, f64) {
         let sigma_err_squared = mean(self.velocity_errors.clone());
         let median_redshift = median(self.redshift_members.clone());
@@ -172,6 +186,15 @@ impl Group {
 
         // Return the original index
         temp_indices[max_flux_idx]
+    }
+
+    /// Returns the (RA, Dec, redshift) of the iterative center.  
+    pub fn calculate_iterative_center(&self) -> (f64, f64, f64) {
+        let idx = self.calculate_iterative_center_idx();
+        let ra = self.ra_members[idx];
+        let dec = self.dec_members[idx];
+        let redshift = self.redshift_members[idx];
+        (ra, dec, redshift)
     }
 
     /// Dispersion of the plane of sky
@@ -305,6 +328,27 @@ impl Group {
 
     pub fn total_absolute_magnitude(&self) -> f64 {
         -2.5 * self.total_flux().log10()
+    }
+
+    pub fn robotham_mass(&self, cosmo: &Cosmology) -> f64 {
+        let (ra, dec, z) = self.calculate_iterative_center();
+        let [r50, _, _] = self.calculate_radius(ra, dec, z, cosmo);
+        let (sigma, _) = self.velocity_dispersion_gapper();
+        calculate_raw_mass(r50, sigma)
+    }
+
+    pub fn temple_mass(&self, cosmo: &Cosmology) -> f64 {
+        let (ra, dec, _) = self.calculate_iterative_center();
+        let grav_rad = 4.582 * self.calculate_sky_distribution(cosmo, &ra, &dec);
+        let (sigma, _) = self.velocity_dispersion_gapper();
+        calculate_total_mass(grav_rad, sigma)
+    }
+
+    pub fn van_keempen_mass(&self, cosmo: &Cosmology) -> f64 {
+        let (ra, dec, z) = self.calculate_iterative_center();
+        let [_, _, r100] = self.calculate_radius(ra, dec, z, cosmo);
+        let (sigma, _) = self.velocity_dispersion_gapper();
+        calculate_velocity_disp_corr_mass(r100, sigma, cosmo)
     }
 }
 
@@ -462,6 +506,7 @@ impl GroupedGalaxyCatalog {
                 total_flux_proxies.push(local_group.flux_proxy());
             }
         }
+        // TODO: Make a call to some function that will build the error function.
 
         GroupCatalog {
             ids: id_groups,
