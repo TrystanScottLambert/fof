@@ -60,12 +60,27 @@ enum MassMethod {
     Tempel,
     Vankeempen,
 }
+
+fn create_mass_error_track(
+    group: Group,
+    cosmo: &Cosmology,
+    method: MassMethod,
+) -> (Vec<u32>, Vec<f64>) {
+    todo!();
+}
+
 /// Determines the error function for a particular mass method.
 ///
 /// Following Driver+2022, we take galaxies with N>20 and and iteratively remove the faintiest
 /// member and recalculate the mass. All these tracks are then used to find the median line and
 /// uncertainty as a function of multiplicity.
-fn calculate_error_function(method: MassMethod, groups: Vec<Group>) {}
+fn calculate_error_function(method: MassMethod, groups: Vec<Group>) {
+    // filter to only groups with > 20 members.
+    let large_group: Vec<Group> = groups
+        .into_iter()
+        .filter(|group| group.multiplicity() > 20)
+        .collect();
+}
 
 /// A Group struct which stores the necessary values required for the group catalog.
 pub struct Group {
