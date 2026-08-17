@@ -15,7 +15,7 @@ use crate::stats::{mean, median, quantile_interpolated};
 /// The gravitational_radius must be in Mpc and the los_velocity_dispersion is in km/s
 /// Returns the mass in solar masses
 fn calculate_total_mass(gravitational_radius: &f64, los_velocity_dispersion: &f64) -> f64 {
-    let total_vel_dispersion = (3_f64.sqrt()) * los_velocity_dispersion;
+    let total_vel_dispersion = 3_f64.sqrt() * los_velocity_dispersion;
     2.325e12 * gravitational_radius * (total_vel_dispersion / 100.).powi(2)
 }
 
