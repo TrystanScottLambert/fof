@@ -11,13 +11,12 @@ use crate::stats::{mean, median, quantile_interpolated};
 
 /// Calculating the total mass of the group from the R_g and 1d velocity dispersion
 ///
-/// This is from Equation 8 of Tempel+2014 and assumes the viral theorem.
+/// This is from Equation 8 of Tempel+2014 (https://arxiv.org/abs/1402.1350) and assumes the viral theorem.
 /// The gravitational_radius must be in Mpc and the los_velocity_dispersion is in km/s
 /// Returns the mass in solar masses
 fn calculate_total_mass(gravitational_radius: &f64, los_velocity_dispersion: &f64) -> f64 {
-    2.325e12
-        * gravitational_radius
-        * ((3_f64.powf(1. / 3.)) * los_velocity_dispersion / 100.).powi(2)
+    let total_vel_dispersion = (3_f64.sqrt()) * los_velocity_dispersion;
+    2.325e12 * gravitational_radius * (total_vel_dispersion / 100.).powi(2)
 }
 
 /// Calculting mass bsed off of van Kampen+2026
@@ -915,16 +914,41 @@ mod tests {
             omega_l: 0.7,
             h0: 70.,
         };
-        let radii = [0.016167967,0.216557185, 0.342581695, 1.166117203, 1.002139841, 2.091647763];
-        let vel_disp = [91.96509394, 139.3371829, 281.3694703, 113.5808285, 426.2829603, 712.078098];
-        let ans = [ 12.08785434, 12.60041422, 13.02851379, 13.27414307, 13.84861194, 14.61383147];
+        let radii = [
+            0.016167967,
+            0.216557185,
+            0.342581695,
+            1.166117203,
+            1.002139841,
+            2.091647763,
+        ];
+        let vel_disp = [
+            91.96509394,
+            139.3371829,
+            281.3694703,
+            113.5808285,
+            426.2829603,
+            712.078098,
+        ];
+        let ans = [
+            12.08785434,
+            12.60041422,
+            13.02851379,
+            13.27414307,
+            13.84861194,
+            14.61383147,
+        ];
         let ans: Vec<f64> = ans.iter().map(|&a| 10_f64.powf(a)).collect();
 
-        let res: Vec<f64> = radii.into_iter().zip(vel_disp).map(|(r, v)| calculate_velocity_disp_corr_mass(r, v, &cosmo)).collect();
+        let res: Vec<f64> = radii
+            .into_iter()
+            .zip(vel_disp)
+            .map(|(r, v)| calculate_velocity_disp_corr_mass(r, v, &cosmo))
+            .collect();
         for (r, a) in zip(res, ans) {
             dbg!(r);
             dbg!(a);
-            assert!((r.log10()-a.log10()).abs() < 1e-2);
+            assert!((r.log10() - a.log10()).abs() < 1e-2);
         }
     }
 }
