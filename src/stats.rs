@@ -41,6 +41,22 @@ pub fn mean(values: Vec<f64>) -> f64 {
     summation / n
 }
 
+/// Circular mean as defined in scipy:
+/// Handles edge cases of working out the mean across a circle boundary.
+/// For example: taking the average of two galaxies ar ra = 359 and ra=1 should be zero not 180
+///
+/// Values are in degrees and are returned in degrees
+pub fn circular_mean(angles_degrees: Vec<f64>) -> f64 {
+    let radians = angles_degrees
+        .iter()
+        .map(|ang| ang.to_radians())
+        .collect::<Vec<f64>>();
+    let sin_sum = radians.iter().map(|rad| rad.sin()).sum::<f64>();
+    let cos_sum = radians.iter().map(|rad| rad.cos()).sum::<f64>();
+    let mean_rad = sin_sum.atan2(cos_sum);
+    mean_rad.to_degrees()
+}
+
 /// Compute the sample median.
 pub fn median(mut values: Vec<f64>) -> f64 {
     let len = values.len();
@@ -155,5 +171,22 @@ mod test {
         assert!((results_2 - answers_2).abs() < 1e-5);
         assert!((results_3 - answers_3).abs() < 1e-5);
         assert!((results_4 - answers_4).abs() < 1e-5);
+    }
+    #[test]
+    fn test_circular_mean() {
+        // scipy example (https://github.com/scipy/scipy/blob/v1.18.0/scipy/stats/_morestats.py#L4394-L4485)
+        let angles = vec![20., 30., 330.];
+        assert!((circular_mean(angles) - 126.66666666666666) < 1e-6);
+
+        // testing zero
+        let angles = vec![0., 0.];
+        assert_eq!(circular_mean(angles), 0.);
+
+        // testing one number
+        assert_eq!(circular_mean(vec![1.]), 1.);
+        // testing same number multiple times
+        assert_eq!(circular_mean(vec![2., 2.]), 2.);
+        // testing simple mean not wrapped
+        assert!((circular_mean(vec![2., 4.]) - 3.) < 1e-5);
     }
 }
