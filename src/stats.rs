@@ -35,7 +35,7 @@ pub fn harmonic_mean(values: Vec<f64>) -> f64 {
 }
 
 /// Compute the arithmetic mean.
-pub fn mean(values: Vec<f64>) -> f64 {
+pub fn mean(values: &[f64]) -> f64 {
     let n = values.iter().len() as f64;
     let summation = values.iter().sum::<f64>();
     summation / n
@@ -46,7 +46,7 @@ pub fn mean(values: Vec<f64>) -> f64 {
 /// For example: taking the average of two galaxies ar ra = 359 and ra=1 should be zero not 180
 ///
 /// Values are in degrees and are returned in degrees
-pub fn circular_mean(angles_degrees: Vec<f64>) -> f64 {
+pub fn circular_mean(angles_degrees: &[f64]) -> f64 {
     let radians = angles_degrees
         .iter()
         .map(|ang| ang.to_radians())
@@ -57,22 +57,30 @@ pub fn circular_mean(angles_degrees: Vec<f64>) -> f64 {
     mean_rad.to_degrees()
 }
 
-/// Compute the sample median.
-pub fn median(mut values: Vec<f64>) -> f64 {
-    let len = values.len();
-    if len == 0 {
-        panic!("Cannot compute median of empty vector");
-    }
+/// Median that will sort the array in place.
+pub fn median_in_place(values: &mut [f64]) -> Option<f64> {
+    let n = values.len();
+    if n == 0 {
+        return None;
+    };
+    let mid = n / 2;
+    let (lo, upper, _) = values.select_nth_unstable_by(mid, f64::total_cmp);
+    let upper = *upper;
 
-    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
-
-    if len % 2 == 1 {
-        values[len / 2]
+    Some(if n % 2 == 1 {
+        upper
     } else {
-        let mid = len / 2;
-        (values[mid - 1] + values[mid]) / 2.0
-    }
+        let lower = lo.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        lower + (upper - lower) / 2.0
+    })
 }
+/// Compute the sample median.
+pub fn median(values: &[f64]) -> Option<f64> {
+    median_in_place(&mut values.to_vec())
+}
+
+// TODO: Add test for circularity
+// TODO: Add circular median
 
 /// Direct copy of the density function in R.
 pub fn density(data: &[f64], binwidth: f64, from: f64, to: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
@@ -141,9 +149,9 @@ mod test {
         let answers_2 = 0.2;
         let answers_3 = -0.126;
 
-        let results_1 = mean(values_1);
-        let results_2 = mean(values_2);
-        let results_3 = mean(values_3);
+        let results_1 = mean(&values_1);
+        let results_2 = mean(&values_2);
+        let results_3 = mean(&values_3);
 
         assert!((results_1 - answers_1).abs() < 1e-5);
         assert!((results_2 - answers_2).abs() < 1e-5);
@@ -162,10 +170,10 @@ mod test {
         let answers_3 = -0.2;
         let answers_4 = 0.2;
 
-        let results_1 = median(values_1);
-        let results_2 = median(values_2);
-        let results_3 = median(values_3);
-        let results_4 = median(values_4);
+        let results_1 = median(&values_1).unwrap();
+        let results_2 = median(&values_2).unwrap();
+        let results_3 = median(&values_3).unwrap();
+        let results_4 = median(&values_4).unwrap();
 
         assert!((results_1 - answers_1).abs() < 1e-5);
         assert!((results_2 - answers_2).abs() < 1e-5);
@@ -176,17 +184,17 @@ mod test {
     fn test_circular_mean() {
         // scipy example (https://github.com/scipy/scipy/blob/v1.18.0/scipy/stats/_morestats.py#L4394-L4485)
         let angles = vec![20., 30., 330.];
-        assert!((circular_mean(angles) - 126.66666666666666) < 1e-6);
+        assert!((circular_mean(&angles) - 126.66666666666666) < 1e-6);
 
         // testing zero
         let angles = vec![0., 0.];
-        assert_eq!(circular_mean(angles), 0.);
+        assert_eq!(circular_mean(&angles), 0.);
 
         // testing one number
-        assert_eq!(circular_mean(vec![1.]), 1.);
+        assert_eq!(circular_mean(&vec![1.]), 1.);
         // testing same number multiple times
-        assert_eq!(circular_mean(vec![2., 2.]), 2.);
+        assert_eq!(circular_mean(&vec![2., 2.]), 2.);
         // testing simple mean not wrapped
-        assert!((circular_mean(vec![2., 4.]) - 3.) < 1e-5);
+        assert!((circular_mean(&vec![2., 4.]) - 3.) < 1e-5);
     }
 }
