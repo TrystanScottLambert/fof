@@ -3,20 +3,244 @@ use std::{f64::consts::PI, iter::zip};
 
 use crate::constants::{G_MSOL_MPC_KMS2, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
+use crate::group_properties::center::{calculate_center, CenterMethod};
+use crate::group_properties::on_sky_dispersion::calculate_sky_distribution;
+use crate::group_properties::redshift::{calculate_redshift, RedshiftMethod};
 use crate::spherical_trig_funcs::{
     angular_separation_small_angle, convert_cartesian_to_equitorial,
     convert_equitorial_to_cartesian, convert_equitorial_to_cartesian_scaled, euclidean_distance_3d,
 };
-use crate::stats::{mean, median, quantile_interpolated};
+use crate::stats::{circular_mean, circular_median, mean, median, quantile_interpolated};
 
 /// Calculating the total mass of the group from the R_g and 1d velocity dispersion
 ///
 /// This is from Equation 8 of Tempel+2014 (https://arxiv.org/abs/1402.1350) and assumes the viral theorem.
 /// The gravitational_radius must be in Mpc and the los_velocity_dispersion is in km/s
 /// Returns the mass in solar masses
-fn calculate_total_mass(gravitational_radius: &f64, los_velocity_dispersion: &f64) -> f64 {
+fn calculate_hernquist_mass(sky_dispersion: &f64, los_velocity_dispersion: &f64) -> f64 {
     let total_vel_dispersion = 3_f64.sqrt() * los_velocity_dispersion;
+    let gravitational_radius = 4.582 * sky_dispersion;
     2.325e12 * gravitational_radius * (total_vel_dispersion / 100.).powi(2)
+}
+
+mod redshift {
+    use super::*;
+
+    pub enum RedshiftMethod {
+        Iter,
+        Bcg,
+        Mean,
+        Median,
+        Col,
+    }
+
+    pub struct Redshift {
+        pub value: f64,
+        pub method: RedshiftMethod,
+    }
+
+    impl Redshift {
+        pub fn new(value: f64, method: RedshiftMethod) -> Self {
+            Redshift { value, method }
+        }
+    }
+
+    fn calculate_mean_redshift(group: &Group) -> Redshift {
+        let redshift = mean(&group.redshift_members);
+        Redshift::new(redshift, RedshiftMethod::Mean)
+    }
+
+    fn calculate_median_redshift(group: &Group) -> Redshift {
+        let redshift = median(&group.redshift_members).unwrap();
+        Redshift::new(redshift, RedshiftMethod::Median)
+    }
+
+    fn calculate_bcg_redshift(group: &Group) -> Redshift {
+        let idx = group.calculate_the_bcg_idx();
+        let redshift = group
+            .redshift_members
+            .get(idx)
+            .expect("BCG redshift cannot be calculated for this group.");
+        Redshift::new(*redshift, RedshiftMethod::Bcg)
+    }
+
+    fn calculate_col_redshift(group: &Group) -> Redshift {
+        let redshift = group
+            .redshift_members
+            .iter()
+            .zip(group.fluxes().iter())
+            .map(|(red, flux)| red * flux)
+            .sum::<f64>()
+            / group.total_flux();
+        Redshift::new(redshift, RedshiftMethod::Col)
+    }
+
+    fn calculate_iter_redshift(group: &Group) -> Redshift {
+        let idx = group.calculate_iterative_center_idx();
+        let redshift = group
+            .redshift_members
+            .get(idx)
+            .expect("Iterative redshift cannot be calculated for this group.");
+        Redshift::new(*redshift, RedshiftMethod::Iter)
+    }
+
+    pub fn calculate_redshift(group: &Group, redshift_type: RedshiftMethod) -> Redshift {
+        match redshift_type {
+            RedshiftMethod::Mean => calculate_mean_redshift(group),
+            RedshiftMethod::Median => calculate_median_redshift(group),
+            RedshiftMethod::Bcg => calculate_bcg_redshift(group),
+            RedshiftMethod::Col => calculate_col_redshift(group),
+            RedshiftMethod::Iter => calculate_iter_redshift(group),
+        }
+    }
+}
+
+mod center {
+    use super::*;
+
+    pub struct Coord {
+        pub ra: f64,
+        pub dec: f64,
+    }
+
+    pub enum CenterMethod {
+        Iter,
+        Bcg,
+        Mean,
+        Median,
+        Col,
+    }
+
+    pub struct GroupCenter {
+        pub value: Coord,
+        pub method: CenterMethod,
+    }
+
+    impl GroupCenter {
+        pub fn new(ra: f64, dec: f64, method: CenterMethod) -> Self {
+            let coord = Coord { ra, dec };
+            GroupCenter {
+                value: coord,
+                method,
+            }
+        }
+    }
+
+    fn calculate_mean_center(group: &Group) -> GroupCenter {
+        let ra = circular_mean(&group.ra_members);
+        let dec = mean(&group.dec_members);
+        GroupCenter::new(ra, dec, CenterMethod::Mean)
+    }
+
+    fn calculate_median_center(group: &Group) -> GroupCenter {
+        let ra = circular_median(&group.ra_members).unwrap();
+        let dec = median(&group.dec_members).unwrap();
+        GroupCenter::new(ra, dec, CenterMethod::Median)
+    }
+
+    fn calculate_bcg_center(group: &Group) -> GroupCenter {
+        let idx = group.calculate_the_bcg_idx();
+        let ra = group
+            .ra_members
+            .get(idx)
+            .expect("BCG RA cannot be calculated for this group");
+        let dec = group
+            .dec_members
+            .get(idx)
+            .expect("BCG Dec cannot be calculated for this group.");
+        GroupCenter::new(*ra, *dec, CenterMethod::Bcg)
+    }
+
+    fn calculate_col_center(group: &Group) -> GroupCenter {
+        let coords_cartesian: Vec<[f64; 3]> =
+            zip(group.ra_members.clone(), group.dec_members.clone())
+                .map(|(ra, dec)| convert_equitorial_to_cartesian(&ra, &dec))
+                .collect();
+
+        let weighted_x = coords_cartesian
+            .iter()
+            .zip(group.fluxes().iter())
+            .map(|(coord, flux)| coord[0] * flux)
+            .sum::<f64>()
+            / group.total_flux();
+
+        let weighted_y = coords_cartesian
+            .iter()
+            .zip(group.fluxes().iter())
+            .map(|(coord, flux)| coord[1] * flux)
+            .sum::<f64>()
+            / group.total_flux();
+
+        let weighted_z = coords_cartesian
+            .iter()
+            .zip(group.fluxes().iter())
+            .map(|(coord, flux)| coord[2] * flux)
+            .sum::<f64>()
+            / group.total_flux();
+
+        let on_sky_center = convert_cartesian_to_equitorial(&weighted_x, &weighted_y, &weighted_z);
+        GroupCenter::new(on_sky_center[0], on_sky_center[1], CenterMethod::Iter)
+    }
+
+    fn calculate_iter_center(group: &Group) -> GroupCenter {
+        let idx = group.calculate_iterative_center_idx();
+        let ra = group
+            .ra_members
+            .get(idx)
+            .expect("Iterative RA cannot be calculated for this group");
+        let dec = group
+            .ra_members
+            .get(idx)
+            .expect("Iterative Dec cannot be calculated for this group.");
+        GroupCenter::new(*ra, *dec, CenterMethod::Iter)
+    }
+
+    pub fn calculate_center(group: &Group, center_type: CenterMethod) -> GroupCenter {
+        match center_type {
+            CenterMethod::Mean => calculate_mean_center(group),
+            CenterMethod::Median => calculate_median_center(group),
+            CenterMethod::Bcg => calculate_bcg_center(group),
+            CenterMethod::Col => calculate_col_center(group),
+            CenterMethod::Iter => calculate_iter_center(group),
+        }
+    }
+}
+
+mod on_sky_dispersion {
+    use crate::group_properties::{center::GroupCenter, redshift::Redshift};
+
+    use super::*;
+    pub enum OnSkyDisperion {
+        Tempel2014(f64),
+    }
+
+    /// Dispersion of the plane of sky
+    ///
+    /// Calculating the dispersion of the plane of sky using Equation 4 from Tempel+2014
+    /// In units of Mpc
+    pub fn calculate_sky_distribution(
+        cosmo: &Cosmology,
+        group: &Group,
+        center: &GroupCenter,
+        redshift: &Redshift,
+    ) -> f64 {
+        let projected_distances: Vec<f64> = group
+            .ra_members
+            .iter()
+            .zip(group.dec_members.iter())
+            .map(|(ra, dec)| {
+                angular_separation_small_angle(ra, dec, &center.value.ra, &center.value.dec)
+                    * 3600. // deg to arcseconds
+                    * cosmo.kpc_per_arcsecond_comoving(redshift.value)
+            })
+            .collect();
+        ((1. / ((group.multiplicity() as f64 * 2.) * (1. + redshift.value).powi(2)))
+            * projected_distances
+                .par_iter()
+                .map(|kpc| (kpc / 1000.).powi(2)) // to Mpc
+                .sum::<f64>())
+        .sqrt()
+    }
 }
 
 /// Calculting mass bsed off of van Kampen+2026
@@ -63,27 +287,27 @@ impl Group {
     }
 
     /// The median of the redshfit of the members.
-    pub fn median_redshift(&self) -> f64 {
-        median(self.redshift_members.clone())
+    pub fn median_redshift(&self) -> Option<f64> {
+        median(&self.redshift_members)
     }
 
     /// The comoving distance at the median redshift.
     pub fn median_distance(&self, cosmo: &Cosmology) -> f64 {
-        cosmo.comoving_distance(self.median_redshift())
+        cosmo.comoving_distance(self.median_redshift().expect("Empty redshift array."))
     }
 
     /// The velocity dispersion as calculated through the gapper method.
     /// The Sigma error would be in km/s.
     pub fn velocity_dispersion_gapper(&self) -> (f64, f64) {
-        let sigma_err_squared = mean(self.velocity_errors.clone());
-        let median_redshift = median(self.redshift_members.clone());
+        let sigma_err_squared = mean(&self.velocity_errors);
+        let median_redshift = median(&self.redshift_members);
         let n = self.redshift_members.len();
         let nf64 = n as f64;
 
         let mut velocities: Vec<f64> = self
             .redshift_members
             .par_iter()
-            .map(|z| (z * SPEED_OF_LIGHT) / (1. + median_redshift))
+            .map(|z| (z * SPEED_OF_LIGHT) / (1. + median_redshift.expect("Empty redshift array.")))
             .collect();
 
         velocities.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -100,6 +324,15 @@ impl Group {
             0.0
         };
         (dispersion, sigma_err_squared.sqrt())
+    }
+
+    pub fn calculate_the_bcg_idx(&self) -> usize {
+        self.absolute_magnitude_members
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .map(|(i, _)| i)
+            .expect("Failed to calculate bcg index.")
     }
 
     /// Returns the index (in the original input arrays) of the final remaining object
@@ -167,35 +400,6 @@ impl Group {
         temp_indices[max_flux_idx]
     }
 
-    /// Dispersion of the plane of sky
-    ///
-    /// Calculating the dispersion of the plane of sky using Equation 4 from Tempel+2014
-    /// Using the iterative center as the definition of center.
-    /// In units of Mpc
-    pub fn calculate_sky_distribution(
-        &self,
-        cosmo: &Cosmology,
-        group_ra: &f64,
-        group_dec: &f64,
-    ) -> f64 {
-        let projected_distances: Vec<f64> = self
-            .ra_members
-            .iter()
-            .zip(self.dec_members.iter())
-            .map(|(ra, dec)| {
-                angular_separation_small_angle(ra, dec, group_ra, group_dec)
-                    * 3600. // deg to arcseconds
-                    * cosmo.kpc_per_arcsecond_comoving(self.median_redshift())
-            })
-            .collect();
-        ((1. / ((self.ra_members.len() as f64 * 2.) * (1. + self.median_redshift()).powi(2)))
-            * projected_distances
-                .par_iter()
-                .map(|kpc| (kpc / 1000.).powi(2)) // to Mpc
-                .sum::<f64>())
-        .sqrt()
-    }
-
     /// Several radii measurements of the group.
     /// R50, Rsigma, R100. These are the radii that contain 50%, 68% and 100% of the galaxies.
     pub fn calculate_radius(
@@ -231,64 +435,15 @@ impl Group {
         [q50, q68, q100]
     }
 
-    pub fn calculate_center_of_light(&self) -> (f64, f64) {
-        let fluxes: Vec<f64> = self
-            .absolute_magnitude_members
-            .par_iter()
-            .map(|mag| 10.0_f64.powf(-0.4 * mag))
-            .collect();
-        let sum_flux: f64 = fluxes.iter().sum();
-        let coords_cartesian: Vec<[f64; 3]> =
-            zip(self.ra_members.clone(), self.dec_members.clone())
-                .map(|(ra, dec)| convert_equitorial_to_cartesian(&ra, &dec))
-                .collect();
-
-        let weighted_x = coords_cartesian
-            .iter()
-            .zip(fluxes.iter())
-            .map(|(coord, flux)| coord[0] * flux)
-            .sum::<f64>()
-            / sum_flux;
-
-        let weighted_y = coords_cartesian
-            .iter()
-            .zip(fluxes.iter())
-            .map(|(coord, flux)| coord[1] * flux)
-            .sum::<f64>()
-            / sum_flux;
-
-        let weighted_z = coords_cartesian
-            .iter()
-            .zip(fluxes.iter())
-            .map(|(coord, flux)| coord[2] * flux)
-            .sum::<f64>()
-            / sum_flux;
-
-        let center = convert_cartesian_to_equitorial(&weighted_x, &weighted_y, &weighted_z);
-        (center[0], center[1])
-    }
-
-    pub fn calculate_flux_weighted_redshift(&self) -> f64 {
-        let fluxes: Vec<f64> = self
-            .absolute_magnitude_members
-            .par_iter()
-            .map(|mag| 10_f64.powf(-0.4 * mag))
-            .collect();
-        let sum_flux: f64 = fluxes.iter().sum();
-
-        self.redshift_members
-            .iter()
-            .zip(fluxes.iter())
-            .map(|(red, flux)| red * flux)
-            .sum::<f64>()
-            / sum_flux
-    }
-
-    pub fn total_flux(&self) -> f64 {
+    pub fn fluxes(&self) -> Vec<f64> {
         self.absolute_magnitude_members
             .par_iter()
             .map(|mag| 10.0_f64.powf(-0.4 * mag))
-            .sum()
+            .collect()
+    }
+
+    pub fn total_flux(&self) -> f64 {
+        self.fluxes().iter().sum()
     }
 
     pub fn flux_proxy(&self) -> f64 {
@@ -337,7 +492,7 @@ impl GroupedGalaxyCatalog {
         let mut velocity_dispersions: Vec<f64> = Vec::new();
         let mut velocity_dispersion_errs: Vec<f64> = Vec::new();
         let mut raw_masses: Vec<f64> = Vec::new();
-        let mut estimated_masses: Vec<f64> = Vec::new();
+        let mut hernquist_masses: Vec<f64> = Vec::new();
         let mut vd_corrected_masses: Vec<f64> = Vec::new();
         let mut bcg_idxs: Vec<usize> = Vec::new();
         let mut bcg_ras: Vec<f64> = Vec::new();
@@ -385,17 +540,6 @@ impl GroupedGalaxyCatalog {
                     .map(|i| *self.velocity_errors.get(i as usize).unwrap())
                     .collect();
 
-                let local_bcg_id = local_mag
-                    .iter()
-                    .enumerate()
-                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-                    .map(|(i, _)| i)
-                    .unwrap();
-                let global_bcg_idx = local_group_ids[local_bcg_id] as usize;
-                let bcg_ra = local_ra[local_bcg_id];
-                let bcg_dec = local_dec[local_bcg_id];
-                let bcg_z = local_z[local_bcg_id];
-
                 let local_group = Group {
                     ra_members: local_ra.clone(),
                     dec_members: local_dec.clone(),
@@ -408,24 +552,33 @@ impl GroupedGalaxyCatalog {
 
                 //let (ra_group, dec_group) = local_group.calculate_iterative_center();
                 let iterative_idx = local_group.calculate_iterative_center_idx();
+                let bcg_idx = local_group.calculate_the_bcg_idx();
                 let (ra_group, dec_group, iterative_redshift) = (
                     local_ra[iterative_idx],
                     local_dec[iterative_idx],
                     local_z[iterative_idx],
                 );
                 let global_iterative_idx = local_group_ids[iterative_idx] as usize;
+                let global_bcg_idx = local_group_ids[bcg_idx] as usize;
+                let bcg_ra = local_ra[bcg_idx];
+                let bcg_dec = local_dec[bcg_idx];
+                let bcg_z = local_z[bcg_idx];
 
-                let z_group = local_group.median_redshift();
+                let z_group = local_group
+                    .median_redshift()
+                    .expect("Median redshift is zero.");
                 let [r50_group, rsimga_group, r100_group] =
                     local_group.calculate_radius(ra_group, dec_group, z_group, cosmo);
 
                 let raw_mass = (r50_group * velocity_disp.powi(2)) / G_MSOL_MPC_KMS2;
 
-                let (col_ra, col_dec) = local_group.calculate_center_of_light();
+                let col_center = calculate_center(&local_group, center::CenterMethod::Col);
 
-                let sky_disp = local_group.calculate_sky_distribution(cosmo, &ra_group, &dec_group);
-                let grav_rad = 4.582 * sky_disp;
-                let m_total = calculate_total_mass(&grav_rad, &velocity_disp);
+                let iter_center = calculate_center(&local_group, CenterMethod::Iter);
+                let median_redshift = calculate_redshift(&local_group, RedshiftMethod::Median);
+                let sky_disp =
+                    calculate_sky_distribution(cosmo, &local_group, &iter_center, &median_redshift);
+                let m_hernquist = calculate_hernquist_mass(&sky_disp, &velocity_disp);
                 let m_vd_correct =
                     calculate_velocity_disp_corr_mass(r100_group, velocity_disp, cosmo);
 
@@ -443,14 +596,14 @@ impl GroupedGalaxyCatalog {
                 velocity_dispersions.push(velocity_disp);
                 velocity_dispersion_errs.push(velocity_disp_err);
                 raw_masses.push(raw_mass);
-                estimated_masses.push(m_total);
+                hernquist_masses.push(m_hernquist);
                 vd_corrected_masses.push(m_vd_correct);
                 bcg_idxs.push(global_bcg_idx);
                 bcg_ras.push(bcg_ra);
                 bcg_decs.push(bcg_dec);
                 bcg_redshifts.push(bcg_z);
-                col_ras.push(col_ra);
-                col_decs.push(col_dec);
+                col_ras.push(col_center.value.ra);
+                col_decs.push(col_center.value.dec);
                 total_absolute_mags.push(local_group.total_absolute_magnitude());
                 total_flux_proxies.push(local_group.flux_proxy());
             }
@@ -471,7 +624,7 @@ impl GroupedGalaxyCatalog {
             velocity_dispersion_gap: velocity_dispersions,
             velocity_dispersion_gap_err: velocity_dispersion_errs,
             raw_masses,
-            estimated_masses,
+            hernquist_masses,
             vd_corrected_masses,
             bcg_idxs,
             bcg_ras,
@@ -537,7 +690,8 @@ impl GroupedGalaxyCatalog {
                         velocity_errors: vec![50.; 1], // dummy variable
                     };
 
-                    let (ra, dec) = local_group.calculate_center_of_light();
+                    let col_center = calculate_center(&local_group, CenterMethod::Col);
+                    let col_redshift = calculate_redshift(&local_group, RedshiftMethod::Col);
 
                     ids.push(id);
                     idx_1.push(local_group_ids[0]);
@@ -549,9 +703,9 @@ impl GroupedGalaxyCatalog {
                         &local_dec[1],
                     ));
                     velocity_separation.push((local_z[0] - local_z[1]).abs());
-                    ra_bar.push(ra);
-                    dec_bar.push(dec);
-                    redshift_bar.push(local_group.calculate_flux_weighted_redshift());
+                    ra_bar.push(col_center.value.ra);
+                    dec_bar.push(col_center.value.dec);
+                    redshift_bar.push(col_redshift.value);
                     total_absolute_mags.push(local_group.total_absolute_magnitude())
                 }
             }
@@ -586,7 +740,7 @@ pub struct GroupCatalog {
     pub velocity_dispersion_gap: Vec<f64>,
     pub velocity_dispersion_gap_err: Vec<f64>,
     pub raw_masses: Vec<f64>,
-    pub estimated_masses: Vec<f64>,
+    pub hernquist_masses: Vec<f64>,
     pub vd_corrected_masses: Vec<f64>,
     pub bcg_idxs: Vec<usize>,
     pub bcg_ras: Vec<f64>,
