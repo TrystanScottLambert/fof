@@ -79,8 +79,44 @@ pub fn median(values: &[f64]) -> Option<f64> {
     median_in_place(&mut values.to_vec())
 }
 
-// TODO: Add test for circularity
-// TODO: Add circular median
+/// Median of circular data. Mainly for RA.
+/// Should match the circular package in R which use this reference:
+/// N.I. Fisher (1993) Statistical Analysis of Circular Data, Cambridge University Press.
+pub fn circular_median(angles_deg: &[f64]) -> Option<f64> {
+    let n = angles_deg.len();
+    if n == 0 {
+        return None;
+    }
+
+    let mut a: Vec<f64> = angles_deg.iter().map(|x| x.rem_euclid(360.0)).collect();
+    a.sort_by(f64::total_cmp);
+
+    // Largest gap, including the one across the 0/360 boundary.
+    let (mut cut, mut gap) = (0usize, a[0] + 360.0 - a[n - 1]);
+    for i in 1..n {
+        if a[i] - a[i - 1] > gap {
+            gap = a[i] - a[i - 1];
+            cut = i;
+        }
+    }
+
+    // No half-circle contains the data: the linear median is not valid here.
+    if gap <= 180.0 {
+        return None;
+    }
+
+    // Rotate so the gap straddles the boundary; data now spans [0, 360-gap] ⊂ [0, 180).
+    let shift = a[cut];
+    let mut u: Vec<f64> = a.iter().map(|x| (x - shift).rem_euclid(360.0)).collect();
+    u.sort_by(f64::total_cmp);
+
+    let med = if n % 2 == 1 {
+        u[n / 2]
+    } else {
+        0.5 * (u[n / 2 - 1] + u[n / 2])
+    };
+    Some((med + shift).rem_euclid(360.0))
+}
 
 /// Direct copy of the density function in R.
 pub fn density(data: &[f64], binwidth: f64, from: f64, to: f64, n: usize) -> (Vec<f64>, Vec<f64>) {
@@ -191,10 +227,29 @@ mod test {
         assert_eq!(circular_mean(&angles), 0.);
 
         // testing one number
-        assert_eq!(circular_mean(&vec![1.]), 1.);
+        assert_eq!(circular_mean(&[1.]), 1.);
         // testing same number multiple times
-        assert_eq!(circular_mean(&vec![2., 2.]), 2.);
+        assert_eq!(circular_mean(&[2., 2.]), 2.);
         // testing simple mean not wrapped
-        assert!((circular_mean(&vec![2., 4.]) - 3.) < 1e-5);
+        assert!((circular_mean(&[2., 4.]) - 3.) < 1e-5);
+    }
+    #[test]
+    fn test_circular_median() {
+        // test normal odd
+        let angles = [1., 2., 3.];
+        assert_eq!(circular_median(&angles), median(&angles));
+
+        // test normal even
+        let angles = [1., 2., 3., 4.];
+        assert_eq!(circular_median(&angles), median(&angles));
+
+        // test circular odd
+        // Testing against the circular package in R
+        let angles = [2.3, 358.21, 357.12];
+        assert_eq!(circular_median(&angles).unwrap(), 358.21);
+
+        // test circular even
+        let angles = [2.3, 358.21, 357.12, 359.23];
+        assert_eq!(circular_median(&angles).unwrap(), 358.72);
     }
 }
