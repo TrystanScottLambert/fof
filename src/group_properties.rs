@@ -4,7 +4,7 @@ use std::{f64::consts::PI, iter::zip};
 use crate::constants::{G_MSOL_MPC_KMS2, SOLAR_MAG, SPEED_OF_LIGHT};
 use crate::cosmology_funcs::Cosmology;
 use crate::group_properties::center::{calculate_center, CenterMethod};
-use crate::group_properties::on_sky_dispersion::calculate_sky_distribution;
+use crate::group_properties::on_sky_dispersion::calculate_on_sky_dispersion;
 use crate::group_properties::redshift::{calculate_redshift, RedshiftMethod};
 use crate::spherical_trig_funcs::{
     angular_separation_small_angle, convert_cartesian_to_equitorial,
@@ -210,20 +210,31 @@ mod on_sky_dispersion {
     use crate::group_properties::{center::GroupCenter, redshift::Redshift};
 
     use super::*;
-    pub enum OnSkyDisperion {
-        Tempel2014(f64),
+
+    pub struct OnSkyDispersion {
+        pub value: f64,
+        pub method: OnSkyDisperionMethod,
+    }
+    impl OnSkyDispersion {
+        pub fn new(value: f64, method: OnSkyDisperionMethod) -> Self {
+            OnSkyDispersion { value, method }
+        }
+    }
+
+    pub enum OnSkyDisperionMethod {
+        Tempel2014,
     }
 
     /// Dispersion of the plane of sky
     ///
     /// Calculating the dispersion of the plane of sky using Equation 4 from Tempel+2014
     /// In units of Mpc
-    pub fn calculate_sky_distribution(
+    pub fn calculate_sky_distribution_tempel(
         cosmo: &Cosmology,
         group: &Group,
         center: &GroupCenter,
         redshift: &Redshift,
-    ) -> f64 {
+    ) -> OnSkyDispersion {
         let projected_distances: Vec<f64> = group
             .ra_members
             .iter()
@@ -234,12 +245,28 @@ mod on_sky_dispersion {
                     * cosmo.kpc_per_arcsecond_comoving(redshift.value)
             })
             .collect();
-        ((1. / ((group.multiplicity() as f64 * 2.) * (1. + redshift.value).powi(2)))
+        let dispersion = ((1.
+            / ((group.multiplicity() as f64 * 2.) * (1. + redshift.value).powi(2)))
             * projected_distances
                 .par_iter()
                 .map(|kpc| (kpc / 1000.).powi(2)) // to Mpc
                 .sum::<f64>())
-        .sqrt()
+        .sqrt();
+        OnSkyDispersion::new(dispersion, OnSkyDisperionMethod::Tempel2014)
+    }
+
+    pub fn calculate_on_sky_dispersion(
+        cosmo: &Cosmology,
+        group: &Group,
+        center: &GroupCenter,
+        redshift: &Redshift,
+        method: OnSkyDisperionMethod,
+    ) -> OnSkyDispersion {
+        match method {
+            OnSkyDisperionMethod::Tempel2014 => {
+                calculate_sky_distribution_tempel(cosmo, group, center, redshift)
+            }
+        }
     }
 }
 
@@ -576,8 +603,13 @@ impl GroupedGalaxyCatalog {
 
                 let iter_center = calculate_center(&local_group, CenterMethod::Iter);
                 let median_redshift = calculate_redshift(&local_group, RedshiftMethod::Median);
-                let sky_disp =
-                    calculate_sky_distribution(cosmo, &local_group, &iter_center, &median_redshift);
+                let sky_disp = calculate_on_sky_dispersion(
+                    cosmo,
+                    &local_group,
+                    &iter_center,
+                    &median_redshift,
+                    on_sky_dispersion::OnSkyDisperionMethod::Tempel2014,
+                );
                 let m_hernquist = calculate_hernquist_mass(&sky_disp, &velocity_disp);
                 let m_vd_correct =
                     calculate_velocity_disp_corr_mass(r100_group, velocity_disp, cosmo);
