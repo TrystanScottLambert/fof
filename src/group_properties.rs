@@ -22,6 +22,9 @@ fn calculate_hernquist_mass(sky_dispersion: &f64, los_velocity_dispersion: &f64)
     let gravitational_radius = 4.582 * sky_dispersion;
     2.325e12 * gravitational_radius * (total_vel_dispersion / 100.).powi(2)
 }
+// TODO: Create velocity dispersion property
+// TODO: Create radius property
+// TODO: Create Mass property
 
 mod redshift {
     use super::*;
@@ -267,6 +270,79 @@ mod on_sky_dispersion {
                 calculate_sky_distribution_tempel(cosmo, group, center, redshift)
             }
         }
+    }
+}
+
+mod velocity_dispersion {
+
+    use crate::group_properties::redshift::Redshift;
+
+    use super::*;
+
+    pub enum VelocityDispersionMethod {
+        Gapper,
+        Rms,
+    }
+
+    pub struct VelocityDispersion {
+        value: f64,
+        uncertainty: Option<f64>,
+        method: VelocityDispersionMethod,
+    }
+
+    impl VelocityDispersion {
+        pub fn new(value: f64, method: VelocityDispersionMethod, uncertainty: Option<f64>) -> Self {
+            VelocityDispersion {
+                value,
+                uncertainty,
+                method,
+            }
+        }
+    }
+
+    pub fn calculate_velocity_dispersion_rms(group: &Group) -> VelocityDispersion {
+        1. / (() * ())
+    }
+
+    pub fn calculate_velocity_disperion_gapper(
+        group: &Group,
+        redshift: Redshift,
+    ) -> VelocityDispersion {
+        let sigma_err_squared = mean(&group.velocity_errors);
+        let n = group.multiplicity() as usize;
+        let nf64 = n as f64;
+
+        // TODO: Check that the redshift here can be any median that we want.
+        let mut velocities: Vec<f64> = group
+            .redshift_members
+            .par_iter()
+            .map(|z| (z * SPEED_OF_LIGHT) / (1. + redshift.value))
+            .collect();
+
+        velocities.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let gaps: Vec<f64> = velocities.windows(2).map(|w| w[1] - w[0]).collect();
+        let i: Vec<usize> = (1..n).collect();
+        let weights: Vec<usize> = i.par_iter().map(|val| val * (n - val)).collect();
+
+        let sum: f64 = zip(weights, gaps).map(|(a, b)| a as f64 * b).sum();
+        let sigma_gap: f64 = ((PI.sqrt()) / (nf64 * (nf64 - 1.))) * sum;
+        let raw_dispersion_squared = (n as f64 * sigma_gap.powi(2)) / (nf64 - 1.);
+        let dispersion = if raw_dispersion_squared > sigma_err_squared {
+            (raw_dispersion_squared - sigma_err_squared).sqrt()
+        } else {
+            0.0
+        };
+        VelocityDispersion::new(
+            dispersion,
+            VelocityDispersionMethod::Gapper,
+            Some(sigma_err_squared.sqrt()),
+        )
+    }
+
+    fn calculate_velocity_dispersion(
+        group: &Group,
+        method: VelocityDispersionMethod,
+    ) -> VelocityDispersion {
     }
 }
 
